@@ -3,11 +3,18 @@ import * as puppeteer from 'puppeteer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
-
+import { Browser } from 'puppeteer';
+import {
+  IInvoiceDataForTemplate,
+  IItemDataForTemplate,
+} from 'src/invoices/types';
 @Injectable()
 export class PdfService {
-  async generateInvoicePdf(invoiceData: any): Promise<Buffer> {
-    let browser;
+  async generateInvoicePdf(
+    invoiceData: IInvoiceDataForTemplate,
+  ): Promise<Buffer> {
+    let browser: Browser | null = null;
+
     try {
       const templatePath = path.join(
         __dirname,
@@ -21,7 +28,7 @@ export class PdfService {
       const enrichedData = this.prepareInvoiceData(invoiceData);
       const finalHtml = compiledTemplate(enrichedData);
 
-      const browser = await puppeteer.launch({
+      browser = await puppeteer.launch({
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -29,6 +36,7 @@ export class PdfService {
         ],
         headless: true,
       });
+
       const page = await browser.newPage();
       await page.setContent(finalHtml, { waitUntil: 'domcontentloaded' });
 
@@ -42,28 +50,22 @@ export class PdfService {
       return Buffer.from(pdfBuffer);
     } catch (error) {
       if (browser) await browser.close();
+
       console.error('Грешка при генерирање на PDF:', error);
       throw new InternalServerErrorException(
         'Неуспешно генерирање на PDF документ.',
       );
     }
   }
-
-  // Помошна функција за генерирање на табелата за рекапитулација на ДДВ
-  private prepareInvoiceData(data: any) {
-    // Објект во кој ги групираме даночните стапки (за малата лева табела)
+  private prepareInvoiceData(data: IInvoiceDataForTemplate) {
     const vatGroups: Record<
       number,
       { vatRate: number; base: number; vat: number; total: number }
     > = {};
 
-    // Бидејќи ставките (data.items) доаѓаат веќе пресметани од контролерот,
-    // само поминуваме низ нив за да ги наполниме ДДВ групите
-    data.items.forEach((item: any) => {
-      // Го вадиме ДДВ процентот (пр. од "18%" вадиме чисто 18)
+    data.items.forEach((item: IItemDataForTemplate) => {
       const vatRate = parseInt(item.vatRate) || 0;
 
-      // Вкупната основа за ставката со веќе пресметан попуст (itemSubtotal)
       const base = Number(item.itemSubtotal || 0);
       const vat = base * (vatRate / 100);
       const total = base + vat;
@@ -76,7 +78,6 @@ export class PdfService {
       vatGroups[vatRate].total += total;
     });
 
-    // Форматирање на групираните даноци во низа со 2 децимали
     const vatRecapitulation = Object.values(vatGroups).map((group) => ({
       vatRate: group.vatRate,
       base: group.base.toFixed(2),
@@ -85,8 +86,8 @@ export class PdfService {
     }));
 
     return {
-      ...data, // Ги задржуваме веќе форматираните items, subtotalAmount, vatAmount, finalPayable итн.
-      vatRecapitulation, // Ова ја полни рекапитулацијата во шаблонот
+      ...data,
+      vatRecapitulation,
     };
   }
 }

@@ -172,87 +172,94 @@ export default function InvoicesListPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {invoices.map((invoice) => (
-                <TableRow key={invoice.id} hover>
-                  <TableCell sx={{ fontWeight: "600", color: "#0070f3" }}>
-                    {invoice.invoiceNo}
-                  </TableCell>
-                  <TableCell>
-                    {invoice.client
-                      ? invoice.client.name
-                      : `Клиент ID: ${invoice.clientId}`}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(invoice.dueDate).toLocaleDateString("mk-MK")}
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "500" }}>
-                    {invoice.finalPayable || 0} ден.
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={
-                        invoice.status === "PAID" ? "Платена" : "Неплатена"
-                      }
-                      color={invoice.status === "PAID" ? "success" : "warning"}
-                      size="small"
-                      sx={{ fontWeight: "bold" }}
-                    />
-                  </TableCell>
+              {Array.isArray(invoices) &&
+                invoices.map((invoice) => (
+                  <TableRow key={invoice.id} hover>
+                    <TableCell sx={{ fontWeight: "600", color: "#0070f3" }}>
+                      {invoice.invoiceNo}
+                    </TableCell>
+                    <TableCell>
+                      {invoice.client
+                        ? invoice.client.name
+                        : `Клиент ID: ${invoice.clientId}`}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(invoice.dueDate).toLocaleDateString("mk-MK")}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: "500" }}>
+                      {invoice.finalPayable || 0} ден.
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={
+                          invoice.status === "PAID" ? "Платена" : "Неплатена"
+                        }
+                        color={
+                          invoice.status === "PAID" ? "success" : "warning"
+                        }
+                        size="small"
+                        sx={{ fontWeight: "bold" }}
+                      />
+                    </TableCell>
 
-                  {/* НОВАТА КОЛОНА ЗА АКЦИИ */}
-                  <TableCell align="center">
-                    <Box
-                      sx={{ display: "flex", justifyContent: "center", gap: 1 }}
-                    >
-                      {/* Копче за Преглед */}
-                      <Tooltip title="Прегледај PDF">
-                        <IconButton
-                          component={Link}
-                          href={`/invoices/${invoice.id}/preview`} // Прилагоди ја патеката за твојот Preview екран
-                          size="small"
-                          sx={{
-                            color: "#64748b",
-                            "&:hover": { color: "#0f172a" },
-                          }}
-                        >
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                    {/* НОВАТА КОЛОНА ЗА АКЦИИ */}
+                    <TableCell align="center">
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "center",
+                          gap: 1,
+                        }}
+                      >
+                        {/* Копче за Преглед */}
+                        <Tooltip title="Прегледај PDF">
+                          <IconButton
+                            component={Link}
+                            href={`/invoices/${invoice.id}/preview`} // Прилагоди ја патеката за твојот Preview екран
+                            size="small"
+                            sx={{
+                              color: "#64748b",
+                              "&:hover": { color: "#0f172a" },
+                            }}
+                          >
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
 
-                      {/* Копче за Уреди */}
-                      <Tooltip title="Уреди фактура">
-                        <IconButton
-                          component={Link}
-                          href={`/invoices/${invoice.id}/edit`} // Рута за Edit формата
-                          size="small"
-                          sx={{
-                            color: "#0284c7",
-                            "&:hover": { color: "#0369a1" },
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                        {/* Копче за Уреди */}
+                        <Tooltip title="Уреди фактура">
+                          <IconButton
+                            component={Link}
+                            href={`/invoices/${invoice.id}/edit`} // Рута за Edit формата
+                            size="small"
+                            sx={{
+                              color: "#0284c7",
+                              "&:hover": { color: "#0369a1" },
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
 
-                      {/* Копче за Директно Преземање */}
-                      <Tooltip title="Преземи PDF">
-                        <IconButton
-                          onClick={() =>
-                            handleDownloadPdf(invoice.id, invoice.invoiceNo)
-                          }
-                          size="small"
-                          sx={{
-                            color: "#16a34a",
-                            "&:hover": { color: "#15803d" },
-                          }}
-                        >
-                          <DownloadIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {/* Копче за Директно Преземање */}
+                        <Tooltip title="Преземи PDF">
+                          <IconButton
+                            onClick={() =>
+                              handleDownloadPdf(invoice.id, invoice.invoiceNo)
+                            }
+                            size="small"
+                            sx={{
+                              color: "#16a34a",
+                              "&:hover": { color: "#15803d" },
+                            }}
+                          >
+                            <DownloadIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
             </TableBody>
           </Table>
         </TableContainer>

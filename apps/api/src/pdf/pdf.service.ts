@@ -11,45 +11,49 @@ import { puppeteerConfig } from '../config/puppeteer.config'; // Поправи 
 
 @Injectable()
 export class PdfService {
-  private launchOptions = puppeteerConfig.isProd
-    ? {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
+  async createPDF(htmlContent: string, options?: any): Promise<Buffer> {
+    let browser: any;
+    try {
+      // 1. Проверка дали сме онлајн на Render
+      if (puppeteerConfig.isProd) {
+        // Го вчитуваме пакетот динамички со кастинг во "any" за да ги прескокнеме строгите TS/ESLint проверки
+        const sparticuzChromium = (await import('@sparticuz/chromium')) as any;
+
+        browser = await puppeteer.launch({
+          args: sparticuzChromium.args,
+          defaultViewport: sparticuzChromium.defaultViewport,
+          executablePath: await sparticuzChromium.executablePath(),
+          headless: sparticuzChromium.headless,
+        });
+      } else {
+        // 2. Локално кај тебе на Windows (си користи фабрички локален Chrome)
+        browser = await puppeteer.launch({
+          headless: true,
+        });
       }
-    : {
-        headless: true,
+
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+      const defaultOptions = {
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
+        ...options,
       };
 
-  private defaultPDFOptions: PDFOptions = {
-    format: 'A4',
-    printBackground: true,
-    margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
-  };
-
-  // Твојот главен метод за генерирање кој користи затворање во finally
-  async createPDF(
-    htmlContent: string,
-    options = this.defaultPDFOptions,
-  ): Promise<Buffer> {
-    let browser: Browser | undefined;
-    try {
-      browser = await puppeteer.launch(this.launchOptions);
-      const page = await browser.newPage();
-
-      // networkidle0 е посигурно бидејќи чека да се вчитаат сите стилови/слики
-      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
-
-      const pdfBuffer = await page.pdf(options);
+      const pdfBuffer = await page.pdf(defaultOptions);
       return Buffer.from(pdfBuffer);
-    } catch (error) {
+    } catch (error: unknown) {
+      // Го менуваме во unknown за ESLint
       console.error('Puppeteer Error:', error);
+
+      // Безбедно извлекување на пораката за грешка за да нема "Unsafe assignment"
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
       throw new InternalServerErrorException(
-        `Грешка при генерирање PDF: ${error}`,
+        `Грешка при генерирање PDF: ${errorMessage}`,
       );
     } finally {
       if (browser) {
@@ -57,7 +61,6 @@ export class PdfService {
       }
     }
   }
-
   // Специфичниот метод за твојата фактура
   async generateInvoicePdf(invoiceData: any): Promise<Buffer> {
     const templatePath = path.join(__dirname, 'templates', 'invoice-mk-1.hbs');

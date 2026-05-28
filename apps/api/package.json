@@ -18,8 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "dev": "nest start --watch",
-    "render:build": "npm install && npx puppeteer browsers install chromium && npm run build"
+    "dev": "nest start --watch"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -29,6 +28,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.1",
+    "@sparticuz/chromium": "^147.0.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "handlebars": "^4.7.9",

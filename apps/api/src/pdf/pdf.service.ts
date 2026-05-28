@@ -16,13 +16,13 @@ export class PdfService {
     try {
       // 1. Проверка дали сме онлајн на Render
       if (puppeteerConfig.isProd) {
-        // Го вчитуваме пакетот динамички со кастинг во "any" за да ги прескокнеме строгите TS/ESLint проверки
         const sparticuzChromium = (await import('@sparticuz/chromium')) as any;
 
         browser = await puppeteer.launch({
           args: sparticuzChromium.args,
           defaultViewport: sparticuzChromium.defaultViewport,
-          executablePath: await sparticuzChromium.executablePath(),
+          // ВАЖНО: Ги тргаме заградите () и await бидејќи сега е обичен стринг/getter
+          executablePath: sparticuzChromium.executablePath,
           headless: sparticuzChromium.headless,
         });
       } else {

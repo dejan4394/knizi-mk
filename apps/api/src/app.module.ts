@@ -13,13 +13,15 @@ import { PdfModule } from './pdf/pdf.module';
   imports: [
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      username: 'postgres', // Твојот Postgres username
-      password: 'ilinamalinova2018', // Твојата лозинка за локалната база
-      database: 'knizi_db', // Името на базата што ќе ја креираш во Postgres
-      entities: [__dirname + '/**/*.entity{.ts,.js}'], // Автоматски ќе ги чита сите ентитети
-      synchronize: true, // Автоматски ги креира/менува табелите во базата (само за dev!)
+      url: process.env.DATABASE_URL,
+      host: process.env.DATABASE_URL ? undefined : 'localhost',
+      port: process.env.DATABASE_URL ? undefined : 5432,
+      username: process.env.DATABASE_URL ? undefined : 'postgres',
+      password: process.env.DATABASE_URL ? undefined : 'ilinamalinova2018',
+      database: process.env.DATABASE_URL ? undefined : 'knizi_db',
+      entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      synchronize: true,
+      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
     }),
     AuthModule,
     InvoicesModule,

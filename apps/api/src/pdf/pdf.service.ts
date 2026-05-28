@@ -17,14 +17,16 @@ export class PdfService {
 
       if (isProduction) {
         // 1. ОНЛАЈН НА RENDER
-        // Го кастираме во "any" за TypeScript да не мрчи за дефинициите на верзијата
+        // Го кастираме за безбедни проверки
         const chromiumModule = chromium as any;
-        const path = chromiumModule.executablePath;
+
+        // КЛУЧНИОТ ФИКС: Мора да има и await и загради (), бидејќи ја видовме функцијата во лог фајлот!
+        const path = await chromiumModule.executablePath();
 
         browser = await puppeteer.launch({
           args: chromiumModule.args,
-          defaultViewport: chromiumModule.defaultViewport, // Сега ова ќе помине без грешка
-          executablePath: path,
+          defaultViewport: chromiumModule.defaultViewport,
+          executablePath: path, // Сега тука гарантирано ќе легне чист текстуален стринг (патека)
           headless:
             chromiumModule.headless === 'shell'
               ? true

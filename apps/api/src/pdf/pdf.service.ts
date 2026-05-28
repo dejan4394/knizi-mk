@@ -4,35 +4,37 @@ import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import { puppeteerConfig } from '../config/puppeteer.config'; // Поправи ја патеката до конфигурацијата
 import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 @Injectable()
 export class PdfService {
   async createPDF(htmlContent: string, options?: any): Promise<Buffer> {
     let browser: any;
     try {
-      // Директна и сигурна проверка дали сме на Render (production)
       const isProduction =
         process.env.NODE_ENV === 'production' ||
         process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD === 'true';
 
       if (isProduction) {
         // 1. ОНЛАЈН НА RENDER
-        const sparticuzChromium = (await import('@sparticuz/chromium')) as any;
-
-        // Го извлекуваме точниот извршен фајл преку асинхрониот метод со await и загради ()
-        const path = await sparticuzChromium.executablePath();
+        // Го кастираме во "any" за TypeScript да не мрчи за дефинициите на верзијата
+        const chromiumModule = chromium as any;
+        const path = chromiumModule.executablePath;
 
         browser = await puppeteer.launch({
-          args: sparticuzChromium.args,
-          defaultViewport: sparticuzChromium.defaultViewport,
-          executablePath: path, // Сега тука гарантирано има валиден Linux Chromium стринг
-          headless: sparticuzChromium.headless,
+          args: chromiumModule.args,
+          defaultViewport: chromiumModule.defaultViewport, // Сега ова ќе помине без грешка
+          executablePath: path,
+          headless:
+            chromiumModule.headless === 'shell'
+              ? true
+              : chromiumModule.headless,
         });
       } else {
         // 2. ЛОКАЛНО КАЈ ТЕБЕ НА WINDOWS
         browser = await puppeteer.launch({
           headless: true,
-          channel: 'chrome', // Го користи твојот локален Chrome прелистувач
+          channel: 'chrome', // Го отвора твојот локален Chrome
         });
       }
 

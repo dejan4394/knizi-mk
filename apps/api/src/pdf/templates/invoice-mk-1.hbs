@@ -1,0 +1,334 @@
+<html lang='mk'>
+  <head>
+    <meta charset='utf-8' />
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        color: #333;
+        font-size: 13px;
+        line-height: 1.4;
+        padding: 10px;
+      }
+      .invoice-box {
+        max-width: 800px;
+        margin: auto;
+      }
+      .header-table {
+        width: 100%;
+        margin-bottom: 40px;
+      }
+      .logo {
+        width: 70px;
+        height: 70px;
+      }
+      .company-info {
+        text-align: right;
+        font-size: 12px;
+      }
+      .company-name {
+        font-weight: bold;
+        font-size: 15px;
+      }
+      .details-table {
+        width: 100%;
+        margin-bottom: 25px;
+      }
+      .client-title {
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 3px;
+      }
+      .invoice-title {
+        font-size: 18px;
+        font-weight: bold;
+        border-bottom: 2px solid #000;
+        padding-bottom: 5px;
+        margin-bottom: 20px;
+      }
+
+      /* Стилизирање на главната табела според сликата */
+      .main-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 30px;
+      }
+      .main-table th {
+        background-color: #7f7f7f;
+        color: #ffffff;
+        padding: 8px 10px;
+        font-weight: bold;
+        font-size: 12px;
+        border: 1px solid #7f7f7f;
+      }
+      .main-table td {
+        padding: 10px;
+        border-bottom: 1px solid #e0e0e0;
+        word-break: break-all;
+      }
+
+      /* Долен дел со две секции соочени една наспроти друга */
+      .summary-section {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 60px;
+      }
+      .vat-table-container {
+        width: 45%;
+      }
+      .vat-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .vat-table th {
+        background-color: #8c8c8c;
+        color: #ffffff;
+        padding: 6px;
+        font-size: 11px;
+        font-weight: bold;
+        text-align: center;
+        border: 1px solid #8c8c8c;
+      }
+      .vat-table td {
+        padding: 6px;
+        text-align: center;
+        border: 1px solid #d0d0d0;
+        font-size: 12px;
+      }
+
+      .totals-container {
+        width: 40%;
+      }
+      .totals-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .totals-table td {
+        padding: 4px 0;
+        font-size: 13px;
+      }
+      .totals-table .label {
+        font-weight: bold;
+        text-align: left;
+      }
+      .totals-table .value {
+        text-align: right;
+        font-weight: bold;
+      }
+      .grand-total-row {
+        border-top: 2px solid #000;
+        border-bottom: 2px solid #000;
+      }
+      .grand-total-row td {
+        padding: 8px 0;
+        font-size: 15px;
+      }
+
+      /* Секција за потписи */
+      .signatures {
+        display: flex;
+        justify-content: space-between;
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 0 40px;
+      }
+      .signature-line {
+        width: 200px;
+        border-top: 1px solid #000;
+        margin-top: 50px;
+        padding-top: 5px;
+        font-size: 13px;
+      }
+
+      /* Правна поука на дното */
+      .footer-legal {
+        font-size: 10px;
+        color: #555;
+        text-align: justify;
+        border-top: 1px solid #d0d0d0;
+        padding-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class='invoice-box'>
+
+      <table class='header-table'>
+        <tr>
+          <td>
+            {{#if companyLogo}}
+              <img
+                class='logo'
+                src='{{companyLogo}}'
+                alt='Лого на компанијата'
+              />
+            {{else}}
+              <svg class='logo' viewBox='0 0 100 100'>
+                <circle
+                  cx='50'
+                  cy='50'
+                  r='45'
+                  fill='none'
+                  stroke='#2563eb'
+                  stroke-width='3'
+                />
+                <path d='M50 50 L50 5 A45 45 0 0 1 95 50 Z' fill='#3b82f6' />
+                <path
+                  d='M50 50 L95 50 A45 45 0 0 1 50 95 Z'
+                  fill='#93c5fd'
+                  opacity='0.7'
+                />
+                <path
+                  d='M50 50 L50 95 A45 45 0 0 1 5 50 Z'
+                  fill='none'
+                  stroke='#2563eb'
+                  stroke-width='2'
+                />
+              </svg>
+            {{/if}}
+          </td>
+          <td class='company-info'>
+            <div class='company-name'>{{companyName}}</div>
+            Адреса:
+            {{companyAddress}}<br />
+            Тел:
+            {{companyPhone}}<br />
+            Е-маил:
+            {{companyEmail}}<br />
+            ЕДБ:
+            {{companyEdb}}<br />
+            Банка:
+            {{companyBank}}
+          </td>
+        </tr>
+      </table>
+
+      <table class='details-table'>
+        <tr>
+          <td style='width: 60%; vertical-align: top;'>
+            <div class='client-title'>{{clientName}}</div>
+            {{clientAddress}}<br />
+            ЕДБ:
+            {{clientEdb}}
+          </td>
+          <td style='width: 40%; text-align: right; vertical-align: top;'>
+            <strong>Датум:</strong>
+            {{date}}<br />
+            <strong>Рок за плаќање:</strong>
+            {{dueDate}}
+          </td>
+        </tr>
+      </table>
+
+      <div class='invoice-title'>Фактура бр: {{invoiceNumber}}</div>
+      <table class='main-table'>
+        <thead>
+          <tr>
+            <th style='text-align: center; width: 5%;'>Р.бр</th>
+            <th style='text-align: left; width: 30%;'>Назив на услуга / производ</th>
+            <th style='text-align: center; width: 8%;'>ЕМ</th>
+            <th style='text-align: center; width: 8%;'>Кол.</th>
+            <th style='text-align: right; width: 11%;'>Осн. Цена</th>
+            <th style='text-align: center; width: 8%;'>Попуст</th>
+            <th style='text-align: right; width: 11%;'>Цена со поп.</th>
+            <th style='text-align: center; width: 7%;'>ДДВ%</th>
+            <th style='text-align: right; width: 12%;'>Износ без ДДВ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each items}}
+            <tr>
+              <td style='text-align: center;'>{{this.rbr}}</td>
+              <td style='text-align: left;'>{{this.description}}</td>
+              <td style='text-align: center;'>{{this.unitOfMeasure}}</td>
+              <td style='text-align: center;'>{{this.quantity}}</td>
+              <td style='text-align: right;'>{{this.price}}</td>
+              <td style='text-align: center;'>{{this.discountPercent}}</td>
+              <td style='text-align: right;'>{{this.priceWithDiscount}}</td>
+              <td style='text-align: center;'>{{this.vatRate}}</td>
+              <td style='text-align: right;'>{{this.itemSubtotal}}</td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+
+      <div class='summary-section'>
+
+        <div class='vat-table-container'>
+          <table class='vat-table'>
+            <thead>
+              <tr>
+                <th>Даночни стапки</th>
+                <th>Основа</th>
+                <th>ДДВ</th>
+                <th>Вредност</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each vatRecapitulation}}
+                <tr>
+                  <td>{{this.vatRate}}</td>
+                  <td>{{this.base}}</td>
+                  <td>{{this.vat}}</td>
+                  <td>{{this.total}}</td>
+                </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </div>
+
+        <div class='totals-container'>
+          <table class='totals-table'>
+            <tr>
+              <td class='label'>Вкупно</td>
+              <td class='value'>{{subtotalAmount}}</td>
+            </tr>
+            <tr>
+              <td class='label'>ДДВ</td>
+              <td class='value'>{{vatAmount}}</td>
+            </tr>
+            <tr>
+              <td class='label'>Вредност</td>
+              <td class='value'>{{totalWithVat}}</td>
+            </tr>
+            <tr>
+              <td class='label'>Израмнување</td>
+              <td class='value'>{{roundingAmount}}</td>
+            </tr>
+            <tr class='grand-total-row'>
+              <td class='label'>За плаќање МКД</td>
+              <td class='value'>{{finalPayable}}</td>
+            </tr>
+          </table>
+        </div>
+
+      </div>
+
+      <div class='signatures'>
+        <div class='signature-line'>
+          Фактурирал:
+        </div>
+        <div class='signature-line'>
+          Овластено лице:<br />
+          <span
+            style='font-size: 11px; color: #555; font-weight: normal; display: block; margin-top: 5px;'
+          >{{companySignatory}}</span>
+        </div>
+      </div>
+
+      <div class='footer-legal'>
+        Ве молиме најдоцна до датумот на валутата наведен во фактурата да го
+        подмирите во целост вашиот долг. За секое задоцнување се пресметува
+        законска казнена камата. Ве известуваме доколку навремено не сте добиле
+        фактура за претходниот пресметковен период, должни сте да ја побарате да
+        ви биде доставена од
+        {{companyName}}. По истекот на датумот на валутата кој е определен за
+        плаќање на фактурата, го задржуваме правото да ги преземеме сите мерки
+        согласно законските прописи за наплата на заостанатиот долг вклучувајќи
+        и постапка за присилна наплата. Вашите лични податоци се заштитени
+        согласно Законот за лични податоци (Службен весник на РСМ бр. 42 од
+        16.02.2020г.).
+      </div>
+
+    </div>
+  </body>
+</html>

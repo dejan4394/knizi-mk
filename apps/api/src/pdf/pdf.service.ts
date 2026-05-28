@@ -1,34 +1,33 @@
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
-import puppeteer, { PDFOptions, Browser } from 'puppeteer';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as handlebars from 'handlebars';
 import { puppeteerConfig } from '../config/puppeteer.config'; // Поправи ја патеката до конфигурацијата
+import puppeteer from 'puppeteer-core';
 
 @Injectable()
 export class PdfService {
   async createPDF(htmlContent: string, options?: any): Promise<Buffer> {
     let browser: any;
     try {
-      // 1. Проверка дали сме онлајн на Render
       if (puppeteerConfig.isProd) {
+        // ОНЛАЈН НА RENDER
         const sparticuzChromium = (await import('@sparticuz/chromium')) as any;
 
         browser = await puppeteer.launch({
           args: sparticuzChromium.args,
           defaultViewport: sparticuzChromium.defaultViewport,
-          // ВАЖНО: Ги тргаме заградите () и await бидејќи сега е обичен стринг/getter
-          executablePath: sparticuzChromium.executablePath,
+          executablePath: sparticuzChromium.executablePath, // Како getter, без загради ()
           headless: sparticuzChromium.headless,
         });
       } else {
-        // 2. Локално кај тебе на Windows (си користи фабрички локален Chrome)
+        // ЛОКАЛНО КАЈ ТЕБЕ НА WINDOWS
+        // Локално ќе го натераме puppeteer-core да го отвори твојот реален Chrome на компјутерот
         browser = await puppeteer.launch({
           headless: true,
+          // Оваа патека му кажува на puppeteer-core каде е твојот Chrome на Windows.
+          // Ако користиш Edge или стандарден Chrome, тој сам ќе го најде преку ова:
+          channel: 'chrome',
         });
       }
 
@@ -45,13 +44,9 @@ export class PdfService {
       const pdfBuffer = await page.pdf(defaultOptions);
       return Buffer.from(pdfBuffer);
     } catch (error: unknown) {
-      // Го менуваме во unknown за ESLint
       console.error('Puppeteer Error:', error);
-
-      // Безбедно извлекување на пораката за грешка за да нема "Unsafe assignment"
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-
       throw new InternalServerErrorException(
         `Грешка при генерирање PDF: ${errorMessage}`,
       );

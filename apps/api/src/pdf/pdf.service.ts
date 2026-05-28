@@ -11,19 +11,19 @@ import { puppeteerConfig } from '../config/puppeteer.config'; // Поправи 
 
 @Injectable()
 export class PdfService {
-  private launchOptions = {
-    headless: true,
-    // Ако е на Render ја користи автоматската патека, ако е локално ја остава на undefined за да си земе локален Chrome
-    executablePath: puppeteerConfig.isProd
-      ? puppeteerConfig.executablePath
-      : undefined,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-  };
+  private launchOptions = puppeteerConfig.isProd
+    ? {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+      }
+    : {
+        headless: true,
+      };
 
   private defaultPDFOptions: PDFOptions = {
     format: 'A4',

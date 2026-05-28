@@ -1,11 +1,6 @@
-import * as path from 'path';
-
 export const puppeteerConfig = {
-  // Проверка дали сме онлајн
+  // Автоматски гледа дали сме на Render
   isProd:
     process.env.NODE_ENV === 'production' ||
     process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD === 'true',
-
-  executablePath:
-    '/opt/render/.cache/puppeteer/chrome/linux-148.0.7778.97/chrome-linux64/chrome',
 };

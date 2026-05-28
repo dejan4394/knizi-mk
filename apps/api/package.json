@@ -19,7 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "dev": "nest start --watch",
-    "render:build": "npm install && npx puppeteer browsers install chrome && npm run build"
+    "render:build": "npm install && npx puppeteer browsers install chromium && npm run build"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

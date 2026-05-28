@@ -10,24 +10,29 @@ export class PdfService {
   async createPDF(htmlContent: string, options?: any): Promise<Buffer> {
     let browser: any;
     try {
-      if (puppeteerConfig.isProd) {
-        // ОНЛАЈН НА RENDER
+      // Директна и сигурна проверка дали сме на Render (production)
+      const isProduction =
+        process.env.NODE_ENV === 'production' ||
+        process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD === 'true';
+
+      if (isProduction) {
+        // 1. ОНЛАЈН НА RENDER
         const sparticuzChromium = (await import('@sparticuz/chromium')) as any;
+
+        // Го извлекуваме точниот извршен фајл преку асинхрониот метод со await и загради ()
+        const path = await sparticuzChromium.executablePath();
 
         browser = await puppeteer.launch({
           args: sparticuzChromium.args,
           defaultViewport: sparticuzChromium.defaultViewport,
-          executablePath: sparticuzChromium.executablePath, // Како getter, без загради ()
+          executablePath: path, // Сега тука гарантирано има валиден Linux Chromium стринг
           headless: sparticuzChromium.headless,
         });
       } else {
-        // ЛОКАЛНО КАЈ ТЕБЕ НА WINDOWS
-        // Локално ќе го натераме puppeteer-core да го отвори твојот реален Chrome на компјутерот
+        // 2. ЛОКАЛНО КАЈ ТЕБЕ НА WINDOWS
         browser = await puppeteer.launch({
           headless: true,
-          // Оваа патека му кажува на puppeteer-core каде е твојот Chrome на Windows.
-          // Ако користиш Edge или стандарден Chrome, тој сам ќе го најде преку ова:
-          channel: 'chrome',
+          channel: 'chrome', // Го користи твојот локален Chrome прелистувач
         });
       }
 

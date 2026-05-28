@@ -9,7 +9,6 @@ export class PdfService {
   async generateInvoicePdf(invoiceData: any): Promise<Buffer> {
     let browser;
     try {
-      // 1. Патека до твојот .hbs шаблон
       const templatePath = path.join(
         __dirname,
         'templates',
@@ -19,16 +18,17 @@ export class PdfService {
       const templateHtml = fs.readFileSync(templatePath, 'utf-8');
       const compiledTemplate = handlebars.compile(templateHtml);
 
-      // 2. Ја повикуваме подобрената пресметка за рекапитулација на ДДВ
       const enrichedData = this.prepareInvoiceData(invoiceData);
       const finalHtml = compiledTemplate(enrichedData);
 
-      // 3. Стартување на Puppeteer
-      browser = await puppeteer.launch({
+      const browser = await puppeteer.launch({
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+        ],
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
-
       const page = await browser.newPage();
       await page.setContent(finalHtml, { waitUntil: 'domcontentloaded' });
 

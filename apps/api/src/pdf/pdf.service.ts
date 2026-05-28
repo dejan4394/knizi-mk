@@ -2,9 +2,12 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as handlebars from 'handlebars';
-import { puppeteerConfig } from '../config/puppeteer.config'; // Поправи ја патеката до конфигурацијата
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
+import {
+  IInvoiceDataForTemplate,
+  IItemDataForTemplate,
+} from 'src/invoices/types';
 
 @Injectable()
 export class PdfService {
@@ -16,27 +19,23 @@ export class PdfService {
         process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD === 'true';
 
       if (isProduction) {
-        // 1. ОНЛАЈН НА RENDER
-        // Го кастираме за безбедни проверки
         const chromiumModule = chromium as any;
 
-        // КЛУЧНИОТ ФИКС: Мора да има и await и загради (), бидејќи ја видовме функцијата во лог фајлот!
         const path = await chromiumModule.executablePath();
 
         browser = await puppeteer.launch({
           args: chromiumModule.args,
           defaultViewport: chromiumModule.defaultViewport,
-          executablePath: path, // Сега тука гарантирано ќе легне чист текстуален стринг (патека)
+          executablePath: path,
           headless:
             chromiumModule.headless === 'shell'
               ? true
               : chromiumModule.headless,
         });
       } else {
-        // 2. ЛОКАЛНО КАЈ ТЕБЕ НА WINDOWS
         browser = await puppeteer.launch({
           headless: true,
-          channel: 'chrome', // Го отвора твојот локален Chrome
+          channel: 'chrome',
         });
       }
 
@@ -46,7 +45,12 @@ export class PdfService {
       const defaultOptions = {
         format: 'A4',
         printBackground: true,
-        margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
+        margin: {
+          top: '10mm',
+          right: '10mm',
+          bottom: '10mm',
+          left: '10mm',
+        },
         ...options,
       };
 
@@ -65,21 +69,48 @@ export class PdfService {
       }
     }
   }
-  // Специфичниот метод за твојата фактура
   async generateInvoicePdf(invoiceData: any): Promise<Buffer> {
     const templatePath = path.join(__dirname, 'templates', 'invoice-mk-1.hbs');
     const templateHtml = fs.readFileSync(templatePath, 'utf-8');
     const compiledTemplate = handlebars.compile(templateHtml);
 
-    const enrichedData = this.prepareInvoiceData(invoiceData); // Твојата помошна функција
+    const enrichedData = this.prepareInvoiceData(invoiceData);
     const finalHtml = compiledTemplate(enrichedData);
 
     return this.createPDF(finalHtml);
   }
 
-  // Твојата помошна функција за средување на податоците
-  private prepareInvoiceData(invoiceData: any) {
-    // Тука стои твојот постоечки код за мапирање/средување на датите, пресметките итн.
-    return invoiceData;
+  private prepareInvoiceData(data: IInvoiceDataForTemplate) {
+    const vatGroups: Record<
+      number,
+      { vatRate: number; base: number; vat: number; total: number }
+    > = {};
+
+    data.items.forEach((item: IItemDataForTemplate) => {
+      const vatRate = parseInt(item.vatRate) || 0;
+
+      const base = Number(item.itemSubtotal || 0);
+      const vat = base * (vatRate / 100);
+      const total = base + vat;
+
+      if (!vatGroups[vatRate]) {
+        vatGroups[vatRate] = { vatRate, base: 0, vat: 0, total: 0 };
+      }
+      vatGroups[vatRate].base += base;
+      vatGroups[vatRate].vat += vat;
+      vatGroups[vatRate].total += total;
+    });
+
+    const vatRecapitulation = Object.values(vatGroups).map((group) => ({
+      vatRate: group.vatRate,
+      base: group.base.toFixed(2),
+      vat: group.vat.toFixed(2),
+      total: group.total.toFixed(2),
+    }));
+
+    return {
+      ...data,
+      vatRecapitulation,
+    };
   }
 }

@@ -66,7 +66,7 @@ export default function InvoicesListPage() {
   const handleDownloadPdf = async (id: number, invoiceNo: string) => {
     try {
       const response = await api.get(`/invoices/${id}/pdf`, {
-        responseType: "blob", // Многу важно за правилно преземање на баферот
+        responseType: "blob",
       });
 
       const blob = new Blob([response.data], { type: "application/pdf" });
@@ -83,16 +83,28 @@ export default function InvoicesListPage() {
 
   return (
     <Box>
-      {/* Насловна секција */}
       <Box
         sx={{
           display: "flex",
+          flexDirection: { xs: "column", sm: "row" },
           alignItems: "center",
-          mb: 4,
           justifyContent: "space-between",
+          gap: 2,
+          mb: 4,
+          width: "100%",
         }}
       >
-        <Typography variant="h4" sx={{ fontWeight: "bold", color: "#0f172a" }}>
+        <Typography
+          component="h1"
+          sx={{
+            fontWeight: "bold",
+            color: "#0f172a",
+            fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
+            lineHeight: 1.2,
+            textAlign: { xs: "center", sm: "left" },
+            width: { xs: "100%", sm: "auto" },
+          }}
+        >
           Менаџирање со Фактури
         </Typography>
 
@@ -106,13 +118,13 @@ export default function InvoicesListPage() {
             textTransform: "none",
             fontWeight: "bold",
             borderRadius: "8px",
+            width: { xs: "100%", sm: "auto" },
+            py: { xs: 1.2, sm: 1 },
           }}
         >
           Нова Фактура
         </Button>
       </Box>
-
-      {/* 1. Приказ ако се вчитуваат податоци */}
       {loading ? (
         <Box
           sx={{

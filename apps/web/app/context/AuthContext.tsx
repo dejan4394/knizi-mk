@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(userData);
     localStorage.setItem("token", accessToken);
     localStorage.setItem("user", JSON.stringify(userData));
-    router.push("/invoices"); // По успешен логин, веднаш го носиме на преглед на фактури
+    router.push("/dashboard");
   };
 
   const logout = () => {

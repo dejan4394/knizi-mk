@@ -206,7 +206,14 @@ export default function CreateInvoicePage() {
     >
       <Typography
         variant="h4"
-        sx={{ fontWeight: "bold", mb: 4, color: "#0f172a" }}
+        sx={{
+          fontWeight: "bold",
+          color: "#0f172a",
+          fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
+          lineHeight: 1.2,
+          textAlign: { xs: "center", sm: "left" },
+          width: { xs: "100%", sm: "auto" },
+        }}
       >
         Креирај Нова Фактура
       </Typography>

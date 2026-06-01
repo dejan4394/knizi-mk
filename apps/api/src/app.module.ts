@@ -8,6 +8,7 @@ import { ClientsModule } from './clients/clients.module';
 import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
 import { PdfModule } from './pdf/pdf.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PdfModule } from './pdf/pdf.module';
     CompaniesModule,
     UsersModule,
     PdfModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

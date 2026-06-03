@@ -127,6 +127,26 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
     });
   }, [items]);
 
+  // 1. Пресметка на чиста основа по ставка (цена * количина - попуст)
+  const getItemSubtotal = (item: InvoiceItemState) => {
+    const q = Number(item.quantity) || 0;
+    const p = Number(item.price) || 0;
+    const d = Number(item.discountPercent) || 0;
+    return p * (1 - d / 100) * q;
+  };
+
+  // 2. Пресметка на износ на ДДВ за ставката
+  const getItemVatAmount = (item: InvoiceItemState) => {
+    const subtotal = getItemSubtotal(item);
+    const v = Number(item.vatRate) || 0;
+    return subtotal * (v / 100);
+  };
+
+  // 3. Пресметка на вкупна вредност со вклучено ДДВ за ставката
+  const getItemTotalWithVat = (item: InvoiceItemState) => {
+    return getItemSubtotal(item) + getItemVatAmount(item);
+  };
+
   const handleItemChange = (
     index: number,
     field: keyof InvoiceItemState,
@@ -163,7 +183,6 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
     setItems(items.filter((_, i) => i !== index));
   };
 
-  // 3. Испраќање на ажурираните податоци
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -172,7 +191,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
         invoiceNo,
         dueDate,
         note,
-        items, // Низата ги содржи веќе исчистените броеви од handleItemChange
+        items,
       };
 
       await api.patch(`/invoices/${invoiceId}`, payload);
@@ -198,20 +217,32 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
     <Box
       component="form"
       onSubmit={handleSubmit}
-      sx={{ maxWidth: "1100px", margin: "0 auto" }}
+      sx={{ maxWidth: "1200px", margin: "0 auto", px: { xs: 2, sm: 0 } }}
     >
       <Typography
         variant="h4"
-        sx={{ fontWeight: "bold", mb: 4, color: "#0f172a" }}
+        sx={{
+          fontWeight: "bold",
+          mb: 4,
+          color: "#0f172a",
+          fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
+          textAlign: { xs: "center", sm: "left" },
+        }}
       >
         Уредување на Фактура бр: {invoiceNo}
       </Typography>
 
       {/* Мета податоци */}
-      <Card sx={{ mb: 4, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
+      <Card
+        sx={{
+          mb: 4,
+          boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+          borderRadius: "12px",
+        }}
+      >
         <CardContent sx={{ p: 3 }}>
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, sm: 6 }}>
+            <Grid size={{ xs: 12, sm: 4 }}>
               <TextField
                 label="Број на фактура"
                 variant="outlined"
@@ -221,7 +252,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                 required
               />
             </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
+            <Grid size={{ xs: 12, sm: 4 }}>
               <TextField
                 label="Рок за плаќање"
                 type="date"
@@ -239,10 +270,202 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
         </CardContent>
       </Card>
 
-      {/* Динамична Табела со Ставки */}
+      <Typography
+        variant="h6"
+        sx={{ fontWeight: "bold", mb: 2, color: "#334155" }}
+      >
+        Ставки на фактура
+      </Typography>
+
+      {/* ---------------- SCENARIO A: МОБИЛЕН ПРИКАЗ ---------------- */}
+      <Box
+        sx={{
+          display: { xs: "flex", md: "none" },
+          flexDirection: "column",
+          gap: 3,
+          mb: 2,
+        }}
+      >
+        {items.map((item, index) => (
+          <Card
+            key={index}
+            variant="outlined"
+            sx={{
+              borderRadius: "12px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: "#f8fafc",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
+              <Typography sx={{ fontWeight: "bold", color: "#0070f3" }}>
+                Ставка #{index + 1}
+              </Typography>
+              <IconButton
+                color="error"
+                onClick={() => removeItemRow(index)}
+                disabled={items.length === 1}
+                size="small"
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <CardContent
+              sx={{ p: 3, display: "flex", flexDirection: "column", gap: 2.5 }}
+            >
+              <TextField
+                label="Опис на артикл / услуга"
+                multiline
+                maxRows={5}
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={item.description}
+                onChange={(e) =>
+                  handleItemChange(index, "description", e.target.value)
+                }
+                required
+              />
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    label="ЕМ"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={item.unitOfMeasure}
+                    onChange={(e) =>
+                      handleItemChange(index, "unitOfMeasure", e.target.value)
+                    }
+                  />
+                </Grid>
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    label="Количина"
+                    type="number"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={item.quantity}
+                    onChange={(e) =>
+                      handleItemChange(index, "quantity", e.target.value)
+                    }
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Цена (ден)"
+                    type="number"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    slotProps={{ htmlInput: { step: "0.01" } }}
+                    value={item.price}
+                    onChange={(e) =>
+                      handleItemChange(index, "price", e.target.value)
+                    }
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    label="Попуст %"
+                    type="number"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={item.discountPercent}
+                    onChange={(e) =>
+                      handleItemChange(index, "discountPercent", e.target.value)
+                    }
+                  />
+                </Grid>
+                <Grid size={{ xs: 6 }}>
+                  <Select
+                    size="small"
+                    fullWidth
+                    value={item.vatRate}
+                    onChange={(e) =>
+                      handleItemChange(index, "vatRate", Number(e.target.value))
+                    }
+                  >
+                    <MenuItem value={18}>18% ДДВ</MenuItem>
+                    <MenuItem value={5}>5% ДДВ</MenuItem>
+                    <MenuItem value={0}>0% ДДВ</MenuItem>
+                  </Select>
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 0.5 }} />
+
+              {/* Финансиски детали на мобилен */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Основа:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: "500" }}>
+                    {getItemSubtotal(item).toFixed(2)} ден.
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Износ ДДВ ({item.vatRate}%):
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: "500", color: "#64748b" }}
+                  >
+                    {getItemVatAmount(item).toFixed(2)} ден.
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mt: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="body1"
+                    sx={{ fontWeight: "600", color: "#0f172a" }}
+                  >
+                    Вкупно со ДДВ:
+                  </Typography>
+                  <Typography
+                    variant="body1"
+                    sx={{ fontWeight: "700", color: "#0070f3" }}
+                  >
+                    {getItemTotalWithVat(item).toFixed(2)} ден.
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
+
+      {/* ---------------- SCENARIO Б: ДЕСКТОП ПРИКАЗ ---------------- */}
+      {/* Го зголемивме maxWidth на контејнерот на 1200px за да ги собере сите пресметки фино */}
       <TableContainer
         component={Paper}
-        sx={{ mb: 3, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}
+        sx={{
+          display: { xs: "none", md: "block" },
+          mb: 3,
+          boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+          borderRadius: "12px",
+          overflow: "hidden",
+        }}
       >
         <Table>
           <TableHead sx={{ backgroundColor: "#f8fafc" }}>
@@ -250,21 +473,36 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
               <TableCell sx={{ fontWeight: "bold" }}>
                 Опис на артикл / услуга
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "90px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "65px" }}>
                 ЕМ
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "100px" }}>
-                Количина
+              <TableCell sx={{ fontWeight: "bold", width: "80px" }}>
+                Кол.
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "140px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "115px" }}>
                 Цена (ден)
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "100px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "85px" }}>
                 Попуст %
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "110px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "95px" }}>
                 ДДВ %
               </TableCell>
+
+              {/* Новите пресметковни колони */}
+              <TableCell
+                sx={{ fontWeight: "bold", width: "110px" }}
+                align="right"
+              >
+                Износ ДДВ
+              </TableCell>
+              <TableCell
+                sx={{ fontWeight: "bold", width: "120px" }}
+                align="right"
+              >
+                Вкупно со ДДВ
+              </TableCell>
+
               <TableCell
                 sx={{ fontWeight: "bold", width: "60px" }}
                 align="center"
@@ -276,8 +514,10 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
           <TableBody>
             {items.map((item, index) => (
               <TableRow key={index}>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
+                    multiline
+                    maxRows={5}
                     variant="outlined"
                     size="small"
                     fullWidth
@@ -288,7 +528,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                     required
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     variant="outlined"
                     size="small"
@@ -298,7 +538,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                     }
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     type="number"
                     variant="outlined"
@@ -310,14 +550,12 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                     required
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     type="number"
                     variant="outlined"
                     size="small"
-                    slotProps={{
-                      htmlInput: { step: "0.01" },
-                    }}
+                    slotProps={{ htmlInput: { step: "0.01" } }}
                     value={item.price}
                     onChange={(e) =>
                       handleItemChange(index, "price", e.target.value)
@@ -325,7 +563,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                     required
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     type="number"
                     variant="outlined"
@@ -336,7 +574,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                     }
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <Select
                     size="small"
                     fullWidth
@@ -350,7 +588,34 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
                     <MenuItem value={0}>0%</MenuItem>
                   </Select>
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }} align="center">
+
+                {/* 1. Динамички приказ на пресметаниот износ на ДДВ */}
+                <TableCell sx={{ p: 0.8 }} align="right">
+                  <Typography
+                    sx={{
+                      color: "#64748b",
+                      fontSize: "0.85rem",
+                      fontWeight: "500",
+                    }}
+                  >
+                    {getItemVatAmount(item).toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                {/* 2. Динамички приказ на Вкупно со ДДВ по ставка */}
+                <TableCell sx={{ p: 0.8, pr: 1.5 }} align="right">
+                  <Typography
+                    sx={{
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    {getItemTotalWithVat(item).toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                <TableCell sx={{ p: 0.8 }} align="center">
                   <IconButton
                     color="error"
                     onClick={() => removeItemRow(index)}
@@ -365,11 +630,19 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
         </Table>
       </TableContainer>
 
+      {/* Копче за додавање ставка */}
       <Button
         variant="outlined"
         startIcon={<AddIcon />}
         onClick={addNewItemRow}
-        sx={{ mb: 4, textTransform: "none", fontWeight: "600" }}
+        fullWidth={{ xs: true, sm: false } as any}
+        sx={{
+          mb: 4,
+          textTransform: "none",
+          fontWeight: "600",
+          borderRadius: "8px",
+          py: { xs: 1.2, sm: 1 },
+        }}
       >
         Додади ставка
       </Button>
@@ -392,6 +665,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
             sx={{
               backgroundColor: "#f8fafc",
               boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+              borderRadius: "12px",
             }}
           >
             <CardContent
@@ -449,6 +723,7 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
         type="submit"
         variant="contained"
         size="large"
+        fullWidth
         startIcon={
           submitting ? (
             <CircularProgress size={20} color="inherit" />

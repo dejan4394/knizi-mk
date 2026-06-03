@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import api from "../../../utils/services/api"; // Осигурај се дека патеката до твојот axios инстанца е точна
+import api from "../../../utils/services/api";
 
 import {
   Box,
@@ -45,6 +45,7 @@ export default function CreateInvoicePage() {
   const [clientId, setClientId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [items, setItems] = useState<InvoiceItemInput[]>([
     {
@@ -68,7 +69,7 @@ export default function CreateInvoicePage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loadingClients, setLoadingClients] = useState<boolean>(true);
 
-  // Повлекување на клиентите од базата веднаш штом ќе се отвори формата
+  // Повлекување на клиентите од базата
   useEffect(() => {
     const fetchClientsForForm = async () => {
       try {
@@ -76,7 +77,6 @@ export default function CreateInvoicePage() {
         const response = await api.get("/clients");
         setClients(response.data);
 
-        // Ако веќе има клиенти во базата, автоматски селектирај го првиот
         if (response.data.length > 0) {
           setClientId(response.data[0].id.toString());
         }
@@ -129,6 +129,7 @@ export default function CreateInvoicePage() {
     });
   };
 
+  // Пресметка на калкулациите при промена на ставките
   useEffect(() => {
     let subtotalAmount = 0;
     let vatAmount = 0;
@@ -160,8 +161,29 @@ export default function CreateInvoicePage() {
     });
   }, [items]);
 
+  // 1. Пресметка на чиста основа по ставка (цена * количина - попуст)
+  const getItemSubtotal = (item: InvoiceItemInput) => {
+    const q = Number(item.quantity) || 0;
+    const p = Number(item.price) || 0;
+    const d = Number(item.discountPercent) || 0;
+    return p * (1 - d / 100) * q;
+  };
+
+  // 2. Пресметка на износ на ДДВ за ставката
+  const getItemVatAmount = (item: InvoiceItemInput) => {
+    const subtotal = getItemSubtotal(item);
+    const v = Number(item.vatRate) || 0;
+    return subtotal * (v / 100);
+  };
+
+  // 3. Пресметка на вкупна вредност со вклучено ДДВ за ставката
+  const getItemTotalWithVat = (item: InvoiceItemInput) => {
+    return getItemSubtotal(item) + getItemVatAmount(item);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
 
     const payload = {
       invoiceNo,
@@ -178,6 +200,7 @@ export default function CreateInvoicePage() {
         alert("Фактурата е успешно зачувана во базата!");
         setInvoiceNo("");
         setClientId("");
+        setDueDate("");
         setNote("");
         setItems([
           {
@@ -195,6 +218,8 @@ export default function CreateInvoicePage() {
       alert(
         `Грешка: ${error.response?.data?.message || "Неуспешно издавање."}`,
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -202,24 +227,29 @@ export default function CreateInvoicePage() {
     <Box
       component="form"
       onSubmit={handleSubmit}
-      sx={{ maxWidth: "1100px", margin: "0 auto" }}
+      sx={{ maxWidth: "1200px", margin: "0 auto", px: { xs: 2, sm: 0 } }}
     >
       <Typography
         variant="h4"
         sx={{
           fontWeight: "bold",
+          mb: 4,
           color: "#0f172a",
           fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
-          lineHeight: 1.2,
           textAlign: { xs: "center", sm: "left" },
-          width: { xs: "100%", sm: "auto" },
         }}
       >
         Креирај Нова Фактура
       </Typography>
 
-      {/* Мета податоци (MUI v6 компатибилен синтаксис со size) */}
-      <Card sx={{ mb: 4, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
+      {/* Мета податоци */}
+      <Card
+        sx={{
+          mb: 4,
+          boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+          borderRadius: "12px",
+        }}
+      >
         <CardContent sx={{ p: 3 }}>
           <Grid container spacing={3}>
             <Grid size={{ xs: 12, sm: 4 }}>
@@ -267,9 +297,7 @@ export default function CreateInvoicePage() {
                 variant="outlined"
                 fullWidth
                 slotProps={{
-                  inputLabel: {
-                    shrink: true,
-                  },
+                  inputLabel: { shrink: true },
                 }}
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
@@ -280,10 +308,201 @@ export default function CreateInvoicePage() {
         </CardContent>
       </Card>
 
-      {/* Табела со ставки */}
+      <Typography
+        variant="h6"
+        sx={{ fontWeight: "bold", mb: 2, color: "#334155" }}
+      >
+        Ставки на фактура
+      </Typography>
+
+      {/* ---------------- SCENARIO A: МОБИЛЕН ПРИКАЗ ---------------- */}
+      <Box
+        sx={{
+          display: { xs: "flex", md: "none" },
+          flexDirection: "column",
+          gap: 3,
+          mb: 2,
+        }}
+      >
+        {items.map((item, index) => (
+          <Card
+            key={index}
+            variant="outlined"
+            sx={{
+              borderRadius: "12px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: "#f8fafc",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
+              <Typography sx={{ fontWeight: "bold", color: "#0070f3" }}>
+                Ставка #{index + 1}
+              </Typography>
+              <IconButton
+                color="error"
+                onClick={() => handleRemoveItem(index)}
+                disabled={items.length === 1}
+                size="small"
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <CardContent
+              sx={{ p: 3, display: "flex", flexDirection: "column", gap: 2.5 }}
+            >
+              <TextField
+                label="Опис на артикл / услуга"
+                multiline
+                maxRows={5}
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={item.description}
+                onChange={(e) =>
+                  handleItemChange(index, "description", e.target.value)
+                }
+                required
+              />
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    label="ЕМ"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={item.unitOfMeasure}
+                    onChange={(e) =>
+                      handleItemChange(index, "unitOfMeasure", e.target.value)
+                    }
+                  />
+                </Grid>
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    label="Количина"
+                    type="number"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={item.quantity}
+                    onChange={(e) =>
+                      handleItemChange(index, "quantity", e.target.value)
+                    }
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Цена (ден)"
+                    type="number"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    slotProps={{ htmlInput: { step: "0.01" } }}
+                    value={item.price}
+                    onChange={(e) =>
+                      handleItemChange(index, "price", e.target.value)
+                    }
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    label="Попуст %"
+                    type="number"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={item.discountPercent}
+                    onChange={(e) =>
+                      handleItemChange(index, "discountPercent", e.target.value)
+                    }
+                  />
+                </Grid>
+                <Grid size={{ xs: 6 }}>
+                  <Select
+                    size="small"
+                    fullWidth
+                    value={item.vatRate}
+                    onChange={(e) =>
+                      handleItemChange(index, "vatRate", Number(e.target.value))
+                    }
+                  >
+                    <MenuItem value={18}>18% ДДВ</MenuItem>
+                    <MenuItem value={5}>5% ДДВ</MenuItem>
+                    <MenuItem value={0}>0% ДДВ</MenuItem>
+                  </Select>
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 0.5 }} />
+
+              {/* Финансиски детали на мобилен по ставка */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Основа:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: "500" }}>
+                    {getItemSubtotal(item).toFixed(2)} ден.
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Износ ДДВ ({item.vatRate}%):
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: "500", color: "#64748b" }}
+                  >
+                    {getItemVatAmount(item).toFixed(2)} ден.
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mt: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="body1"
+                    sx={{ fontWeight: "600", color: "#0f172a" }}
+                  >
+                    Вкупно со ДДВ:
+                  </Typography>
+                  <Typography
+                    variant="body1"
+                    sx={{ fontWeight: "700", color: "#0070f3" }}
+                  >
+                    {getItemTotalWithVat(item).toFixed(2)} ден.
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
+
+      {/* ---------------- SCENARIO Б: ДЕСКТОП ПРИКАЗ ---------------- */}
       <TableContainer
         component={Paper}
-        sx={{ mb: 3, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}
+        sx={{
+          display: { xs: "none", md: "block" },
+          mb: 3,
+          boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+          borderRadius: "12px",
+          overflow: "hidden",
+        }}
       >
         <Table>
           <TableHead sx={{ backgroundColor: "#f8fafc" }}>
@@ -291,21 +510,36 @@ export default function CreateInvoicePage() {
               <TableCell sx={{ fontWeight: "bold" }}>
                 Опис на артикл / услуга
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "90px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "65px" }}>
                 ЕМ
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "100px" }}>
-                Количина
+              <TableCell sx={{ fontWeight: "bold", width: "80px" }}>
+                Кол.
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "140px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "115px" }}>
                 Цена (ден)
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "100px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "85px" }}>
                 Попуст %
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", width: "110px" }}>
+              <TableCell sx={{ fontWeight: "bold", width: "95px" }}>
                 ДДВ %
               </TableCell>
+
+              {/* Новите пресметковни колони за ДДВ и Крајно вкупно по ставка */}
+              <TableCell
+                sx={{ fontWeight: "bold", width: "110px" }}
+                align="right"
+              >
+                Износ ДДВ
+              </TableCell>
+              <TableCell
+                sx={{ fontWeight: "bold", width: "120px" }}
+                align="right"
+              >
+                Вкупно со ДДВ
+              </TableCell>
+
               <TableCell
                 sx={{ fontWeight: "bold", width: "60px" }}
                 align="center"
@@ -317,8 +551,10 @@ export default function CreateInvoicePage() {
           <TableBody>
             {items.map((item, index) => (
               <TableRow key={index}>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
+                    multiline
+                    maxRows={5}
                     variant="outlined"
                     size="small"
                     fullWidth
@@ -329,7 +565,7 @@ export default function CreateInvoicePage() {
                     required
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     variant="outlined"
                     size="small"
@@ -339,7 +575,7 @@ export default function CreateInvoicePage() {
                     }
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     type="number"
                     variant="outlined"
@@ -351,14 +587,12 @@ export default function CreateInvoicePage() {
                     required
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     type="number"
                     variant="outlined"
                     size="small"
-                    slotProps={{
-                      htmlInput: { step: "0.01" },
-                    }}
+                    slotProps={{ htmlInput: { step: "0.01" } }}
                     value={item.price}
                     onChange={(e) =>
                       handleItemChange(index, "price", e.target.value)
@@ -366,7 +600,7 @@ export default function CreateInvoicePage() {
                     required
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <TextField
                     type="number"
                     variant="outlined"
@@ -377,7 +611,7 @@ export default function CreateInvoicePage() {
                     }
                   />
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }}>
+                <TableCell sx={{ p: 0.8 }}>
                   <Select
                     size="small"
                     fullWidth
@@ -391,15 +625,41 @@ export default function CreateInvoicePage() {
                     <MenuItem value={0}>0%</MenuItem>
                   </Select>
                 </TableCell>
-                <TableCell sx={{ p: 1.5 }} align="center">
-                  {items.length > 1 && (
-                    <IconButton
-                      color="error"
-                      onClick={() => handleRemoveItem(index)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  )}
+
+                {/* Износ на ДДВ за тековниот ред */}
+                <TableCell sx={{ p: 0.8 }} align="right">
+                  <Typography
+                    sx={{
+                      color: "#64748b",
+                      fontSize: "0.85rem",
+                      fontWeight: "500",
+                    }}
+                  >
+                    {getItemVatAmount(item).toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                {/* Вкупно со ДДВ за тековниот ред */}
+                <TableCell sx={{ p: 0.8, pr: 1.5 }} align="right">
+                  <Typography
+                    sx={{
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    {getItemTotalWithVat(item).toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                <TableCell sx={{ p: 0.8 }} align="center">
+                  <IconButton
+                    color="error"
+                    onClick={() => handleRemoveItem(index)}
+                    disabled={items.length === 1}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
                 </TableCell>
               </TableRow>
             ))}
@@ -407,11 +667,19 @@ export default function CreateInvoicePage() {
         </Table>
       </TableContainer>
 
+      {/* Копче за додавање ставка */}
       <Button
         variant="outlined"
         startIcon={<AddIcon />}
         onClick={handleAddItem}
-        sx={{ mb: 4, textTransform: "none", fontWeight: "600" }}
+        fullWidth={{ xs: true, sm: false } as any}
+        sx={{
+          mb: 4,
+          textTransform: "none",
+          fontWeight: "600",
+          borderRadius: "8px",
+          py: { xs: 1.2, sm: 1 },
+        }}
       >
         Додади ставка
       </Button>
@@ -434,6 +702,7 @@ export default function CreateInvoicePage() {
             sx={{
               backgroundColor: "#f8fafc",
               boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+              borderRadius: "12px",
             }}
           >
             <CardContent
@@ -486,11 +755,20 @@ export default function CreateInvoicePage() {
         </Grid>
       </Grid>
 
+      {/* Копче за зачувување */}
       <Button
         type="submit"
         variant="contained"
         size="large"
-        startIcon={<SaveIcon />}
+        fullWidth
+        startIcon={
+          submitting ? (
+            <CircularProgress size={20} color="inherit" />
+          ) : (
+            <SaveIcon />
+          )
+        }
+        disabled={submitting}
         sx={{
           backgroundColor: "#0070f3",
           padding: "12px 32px",
@@ -501,7 +779,7 @@ export default function CreateInvoicePage() {
           "&:hover": { backgroundColor: "#0051bb" },
         }}
       >
-        Зачувај и Издади Фактура
+        {submitting ? "Се зачувува..." : "Зачувај ја фактурата"}
       </Button>
     </Box>
   );

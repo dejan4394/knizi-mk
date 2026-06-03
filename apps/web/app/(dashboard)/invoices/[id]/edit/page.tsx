@@ -14,8 +14,7 @@ export default function EditInvoicePage() {
   const invoiceId = Number(params.id);
 
   return (
-    <Box sx={{ p: 4 }}>
-      {/* Копче за назад кон листата ако корисникот се премисли */}
+    <Box>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => router.push("/invoices")}
@@ -24,10 +23,9 @@ export default function EditInvoicePage() {
         Назад кон фактури
       </Button>
 
-      {/* Ја рендерираме твојата форма на средина во убав MUI Paper контејнер */}
       <Paper
         sx={{
-          p: 4,
+          p: 1,
           borderRadius: "8px",
           boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
         }}
@@ -35,7 +33,6 @@ export default function EditInvoicePage() {
         <EditInvoiceForm
           invoiceId={invoiceId}
           onSuccess={() => {
-            // Штом успешно ќе зачува на бекенд, го враќаме на главната табела
             router.push("/invoices");
           }}
         />

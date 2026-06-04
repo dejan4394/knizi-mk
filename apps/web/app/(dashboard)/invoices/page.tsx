@@ -159,10 +159,12 @@ export default function InvoicesListPage() {
         <Box
           sx={{
             display: "flex",
+            justifyContent: "center",
             alignItems: "center",
-            minHeight: "200px",
+            minHeight: "60vh",
           }}
         >
+          {" "}
           <CircularProgress />
         </Box>
       ) : error ? (

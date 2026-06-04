@@ -136,7 +136,14 @@ export default function ClientsPage() {
 
       {/* Листа / Табела */}
       {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", mt: 10 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: "60vh",
+          }}
+        >
           <CircularProgress />
         </Box>
       ) : error ? (

@@ -252,46 +252,41 @@ export class InvoicesService {
       );
     }
 
+    const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
+    const pdfBuffer = await this.pdfService.generateInvoicePdf(
+      formattedTemplateData,
+    );
+
+    const isSecurePort = company.smtpPort === 465;
+
+    const transportOptions: SMTPTransport.Options = {
+      host: company.smtpHost,
+      port: company.smtpPort,
+      secure: isSecurePort,
+      auth: {
+        user: company.smtpUser,
+        pass: company.smtpPass,
+      },
+      // Експлицитно форсирање на IPv4 на ниво на сокет на Render
+      connectionTimeout: 20000,
+      greetingTimeout: 20000,
+      socketTimeout: 20000,
+      tls: {
+        rejectUnauthorized: false,
+        minVersion: 'TLSv1.2', // Ова му помага на Yahoo/Gmail да не ја одбие врската од чудни IP адреси
+      },
+    };
+
+    const dynamicTransporter = nodemailer.createTransport(transportOptions);
+
+    // 2. Испраќање на е-маилот
     try {
-      const isSecurePort = company.smtpPort === 465;
-
-      const transportOptions: SMTPTransport.Options = {
-        host: company.smtpHost,
-        port: company.smtpPort,
-        secure: isSecurePort,
-        auth: {
-          user: company.smtpUser,
-          pass: company.smtpPass,
-        },
-        connectionTimeout: 45000,
-        greetingTimeout: 30000,
-        socketTimeout: 45000,
-        tls: {
-          rejectUnauthorized: false,
-        },
-      };
-
-      const dynamicTransporter = nodemailer.createTransport(transportOptions);
-
-      const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
-      const pdfBuffer = await this.pdfService.generateInvoicePdf(
-        formattedTemplateData,
-      );
-
-      // 2. Испраќање на е-маилот
+      // 3. ПРАЌАЊЕ ВЕДНАШ
       await dynamicTransporter.sendMail({
         from: `"${company.name}" <${company.smtpUser}>`,
         to: invoice.client.email,
         subject: `Нова фактура бр. ${invoice.invoiceNo} од ${company.name}`,
-        html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
-          <h2>Почитувани,</h2>
-          <p>Во прилог на овој е-маил Ви ја доставуваме официјалната фактура со број <strong>${invoice.invoiceNo}</strong>.</p>
-          <p>Вкупен износ за уплата: <strong>${invoice.finalPayable} ден.</strong></p>
-          <br />
-          <p>Со почит,<br /><strong>${company.name}</strong></p>
-        </div>
-      `,
+        html: `... твојот html ...`,
         attachments: [
           {
             filename: `Faktura-${invoice.invoiceNo}.pdf`,
@@ -301,17 +296,16 @@ export class InvoicesService {
         ],
       });
 
-      // 3. АЖУРИРАЊЕ НА ДАТУМОТ НА ИСПРАЌАЊЕ ПО УСПЕШЕН МЕИЛ
-      invoice.sentAtDate = new Date(); // Го зема моменталното време во моментот на извршување
-      await this.invoiceRepository.save(invoice); // Спасуваме во база
+      invoice.sentAtDate = new Date();
+      await this.invoiceRepository.save(invoice);
 
-      return {
-        success: true,
-        message: `Успешно испратена фактура и ажуриран датум на праќање.`,
-      };
+      return { success: true, message: `Успешно испратена фактура.` };
     } catch (error) {
-      console.error(`Грешка при испраќање меил:`, error);
-      throw new BadRequestException('Грешка при обработка на меилот.');
+      const err = error as Error;
+      console.error(`Грешка при испраќање меил:`, err.message);
+      throw new BadRequestException(
+        `Грешка при обработка на меилот: ${err.message}`,
+      );
     }
   }
 

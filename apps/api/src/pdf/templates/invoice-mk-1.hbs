@@ -72,7 +72,7 @@
       .summary-section {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 60px;
+        margin-bottom: 30px; /* Намалено малку за да има простор за белешката */
       }
       .vat-table-container {
         width: 45%;
@@ -123,6 +123,19 @@
       .grand-total-row td {
         padding: 8px 0;
         font-size: 15px;
+      }
+
+      /* Нов CSS Стил за Забелешката под пресметките */
+      .invoice-note {
+        width: 100%;
+        margin-bottom: 40px;
+        font-size: 12px;
+        color: #444;
+        background-color: #f8fafc;
+        border-left: 3px solid #7f7f7f;
+        padding: 10px 14px;
+        box-sizing: border-box;
+        white-space: pre-line; /* Го зачувува новиот ред (\n) внесен од корисникот */
       }
 
       /* Секција за потписи */
@@ -224,6 +237,7 @@
       </table>
 
       <div class='invoice-title'>Фактура бр: {{invoiceNumber}}</div>
+
       <table class='main-table'>
         <thead>
           <tr>
@@ -256,7 +270,6 @@
       </table>
 
       <div class='summary-section'>
-
         <div class='vat-table-container'>
           <table class='vat-table'>
             <thead>
@@ -304,8 +317,14 @@
             </tr>
           </table>
         </div>
-
       </div>
+
+      {{#if note}}
+        <div class='invoice-note'>
+          <strong>Забелешка:</strong><br />
+          {{note}}
+        </div>
+      {{/if}}
 
       <div class='signatures'>
         <div class='signature-line'>
@@ -315,7 +334,9 @@
           Овластено лице:<br />
           <span
             style='font-size: 11px; color: #555; font-weight: normal; display: block; margin-top: 5px;'
-          >{{companySignatory}}</span>
+          >
+            {{companySignatory}}
+          </span>
         </div>
       </div>
 

@@ -13,14 +13,19 @@ import {
   Grid,
   CircularProgress,
   Divider,
+  IconButton,
+  InputAdornment,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import BusinessIcon from "@mui/icons-material/Business";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 
 export default function MyCompanySettingsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const [companyData, setCompanyData] = useState({
     name: "",
@@ -30,6 +35,11 @@ export default function MyCompanySettingsPage() {
     bankName: "",
     phone: "",
     email: "",
+    // Новите SMTP полиња:
+    smtpHost: "",
+    smtpPort: 465,
+    smtpUser: "",
+    smtpPass: "", // За безбедност, ова поле ќе биде празно при вчитавање
   });
 
   useEffect(() => {
@@ -46,6 +56,11 @@ export default function MyCompanySettingsPage() {
             bankName: response.data.bankName || "",
             phone: response.data.phone || "",
             email: response.data.email || "",
+            // Ги полниме SMTP вредностите од базата (освен лозинката)
+            smtpHost: response.data.smtpHost || "",
+            smtpPort: response.data.smtpPort || 465,
+            smtpUser: response.data.smtpUser || "",
+            smtpPass: "", // Секогаш ја иницијализираме празна на фронтенд
           });
         }
       } catch (err: any) {
@@ -65,7 +80,19 @@ export default function MyCompanySettingsPage() {
     e.preventDefault();
     try {
       setSaving(true);
-      await api.put("/companies/my-company", companyData);
+
+      // Подготовка на податоците за праќање
+      const payload = {
+        ...companyData,
+        smtpPort: Number(companyData.smtpPort),
+        // Ако лозинката е празна, праќаме undefined за бекендот да не ја пребрише постоечката во базата
+        smtpPass: companyData.smtpPass || undefined,
+      };
+
+      await api.put("/companies/my-company", payload);
+
+      // Ја чистиме состојбата за лозинката по успешно зачувување
+      setCompanyData((prev) => ({ ...prev, smtpPass: "" }));
       alert("Податоците за вашата фирма се успешно зачувани!");
     } catch (err: any) {
       console.error("Грешка при зачувување фирма:", err);
@@ -77,7 +104,7 @@ export default function MyCompanySettingsPage() {
     }
   };
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: any) => {
     setCompanyData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -105,8 +132,8 @@ export default function MyCompanySettingsPage() {
             Профил на Мојата Фирма
           </Typography>
           <Typography variant="body2" color="textSecondary">
-            Уредете ги генералиите на вашата компанија за правилно издавање на
-            фактурите.
+            Уредете ги генералиите и SMTP е-маил поставките на вашата компанија
+            за правилно издавање на фактурите.
           </Typography>
         </Box>
       </Box>
@@ -209,6 +236,95 @@ export default function MyCompanySettingsPage() {
                 value={companyData.email}
                 onChange={(e) => handleChange("email", e.target.value)}
               />
+            </Grid>
+
+            {/* НОВА СЕКЦИЈА: SMTP Е-МАИЛ ПОСТАВКИ ЗА SAAS ИЗОЛАЦИЈА */}
+            <Grid size={{ xs: 12 }}>
+              <Divider sx={{ my: 2 }}>
+                <Typography
+                  variant="body2"
+                  sx={{ color: "#7c3aed", fontWeight: "600" }}
+                >
+                  Поставки за излезен е-маил сервер (SMTP)
+                </Typography>
+              </Divider>
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 8 }}>
+              <TextField
+                label="SMTP Опслужувач (Host)"
+                fullWidth
+                placeholder="на пр. smtp.mail.yahoo.com или smtp.gmail.com"
+                value={companyData.smtpHost}
+                onChange={(e) => handleChange("smtpHost", e.target.value)}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <TextField
+                label="Порт (Port)"
+                fullWidth
+                type="number"
+                placeholder="465 или 587"
+                value={companyData.smtpPort}
+                onChange={(e) => handleChange("smtpPort", e.target.value)}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="SMTP Корисничко име / Маил"
+                fullWidth
+                type="email"
+                placeholder="username@domain.com"
+                value={companyData.smtpUser}
+                onChange={(e) => handleChange("smtpUser", e.target.value)}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="SMTP Апликациска Лозинка"
+                fullWidth
+                type={showPassword ? "text" : "password"}
+                placeholder={
+                  companyData.smtpHost
+                    ? "Внесете нова лозинка само доколку ја менувате..."
+                    : "Внесете ја лозинката..."
+                }
+                value={companyData.smtpPass}
+                onChange={(e) => handleChange("smtpPass", e.target.value)}
+                slotProps={{
+                  input: {
+                    // ОВА ГО СПРЕЧУВА ПРЕДЛИСТУВАЧОТ ДА СТАВА АВТОМАТСКИ ЛОЗИНКИ:
+                    autoComplete: "new-password",
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowPassword(!showPassword)}
+                          edge="end"
+                        >
+                          {showPassword ? (
+                            <VisibilityOffIcon />
+                          ) : (
+                            <VisibilityIcon />
+                          )}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <Typography
+                variant="caption"
+                sx={{ color: "#94a3b8", display: "block", px: 0.5 }}
+              >
+                * Напомена: Потребно е да генерирате специјална апликациска
+                лозинка (App Password) од безбедносните поставки на вашиот
+                е-маил провајдер.
+              </Typography>
             </Grid>
           </Grid>
         </CardContent>

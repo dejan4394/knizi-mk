@@ -9,9 +9,11 @@ import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
 import { PdfModule } from './pdf/pdf.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,

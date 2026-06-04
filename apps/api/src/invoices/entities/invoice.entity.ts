@@ -5,11 +5,10 @@ import { Client } from '../../clients/entities/client.entity';
 import { Company } from '../../companies/entities/company.entity';
 
 export enum InvoiceStatus {
-  DRAFT = 'DRAFT',
   UNPAID = 'UNPAID',
+  OVERDUE = 'OVERDUE', // Новиот статус
   PAID = 'PAID',
-  OVERDUE = 'OVERDUE',
-  SENT = 'SENT',
+  CANCELED = 'CANCELED',
 }
 
 @Entity('invoices')

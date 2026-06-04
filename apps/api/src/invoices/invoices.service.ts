@@ -1,11 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Invoice } from './entities/invoice.entity';
+import { Invoice, InvoiceStatus } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
-import { Client } from '../clients/entities/client.entity'; // УВЕЗИ ГО ЕНТИТЕТОТ НА КЛИЕНТОТ
+import { Client } from '../clients/entities/client.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import * as nodemailer from 'nodemailer';
+import { PdfService } from 'src/pdf/pdf.service';
 
 @Injectable()
 export class InvoicesService {
@@ -16,6 +22,7 @@ export class InvoicesService {
     private readonly itemRepository: Repository<InvoiceItem>,
     @InjectRepository(Client)
     private readonly clientRepository: Repository<Client>, // ИНЈЕКТИРАЈ ГО РЕПОЗИТОРИУМОТ ЗА КЛИЕНТИ
+    private readonly pdfService: PdfService,
   ) {}
 
   async create(
@@ -148,42 +155,11 @@ export class InvoicesService {
       invoice.clientId = Number(clientId);
     }
 
-    // 3. Ажурирање на ставките и препресметка на сумите (само ако се пратени нови 'items')
     if (items && Array.isArray(items)) {
-      // Бришење на старите ставки од базата за оваа фактура пред да ги внесеме новите (Clear & Insert)
       await this.itemRepository.delete({ invoice: { id } });
 
       let subtotalAmount = 0;
       let vatAmount = 0;
-
-      console.log(items, 'Itemssss');
-
-      // const invoiceItems: InvoiceItem[] = items.map((item) => {
-      //   const quantity = Number(item.quantity);
-      //   const price = Number(item.price);
-      //   const discountPercent = Number(item.discountPercent ?? 0);
-      //   const vatRate = Number(item.vatRate ?? 18);
-      //   const description = item.description || '';
-
-      //   const priceAfterDiscount = price * (1 - discountPercent / 100);
-      //   const itemSubtotal = priceAfterDiscount * quantity;
-      //   const itemVat = itemSubtotal * (vatRate / 100);
-
-      //   subtotalAmount += itemSubtotal;
-      //   vatAmount += itemVat;
-
-      //   const invoiceItem = new InvoiceItem();
-      //   invoiceItem.description = description;
-      //   invoiceItem.quantity = quantity;
-      //   invoiceItem.unitOfMeasure = item.unitOfMeasure || 'ПАР';
-      //   invoiceItem.price = price;
-      //   invoiceItem.discountPercent = discountPercent;
-      //   invoiceItem.vatRate = vatRate;
-
-      //   console.log(invoiceItem, 'fsfds');
-
-      //   return invoiceItem;
-      // });
 
       const invoiceItems: InvoiceItem[] = items.map((item) => {
         const quantity = Number(item.quantity);
@@ -192,9 +168,8 @@ export class InvoicesService {
         const vatRate = Number(item.vatRate ?? 18);
         const description = item.description || '';
 
-        // 1. Точна математика за цената по ставка
         const priceAfterDiscount = price * (1 - discountPercent / 100);
-        const itemSubtotal = priceAfterDiscount * quantity; // Основица за ДДВ за оваа ставка
+        const itemSubtotal = priceAfterDiscount * quantity;
         const itemVat = itemSubtotal * (vatRate / 100);
 
         subtotalAmount += itemSubtotal;
@@ -204,7 +179,7 @@ export class InvoicesService {
         invoiceItem.description = description;
         invoiceItem.quantity = quantity;
         invoiceItem.unitOfMeasure = item.unitOfMeasure || 'ПАР';
-        invoiceItem.price = price; // Оригинална цена без попуст
+        invoiceItem.price = price;
         invoiceItem.discountPercent = discountPercent;
         invoiceItem.vatRate = vatRate;
 
@@ -217,7 +192,6 @@ export class InvoicesService {
       const finalPayable = Math.round(exactTotalWithVat);
       const roundingAmount = finalPayable - exactTotalWithVat;
 
-      // Ги доделуваме новите пресметани вредности на ентитетот
       invoice.subtotalAmount = Number(subtotalAmount.toFixed(2));
       invoice.vatAmount = Number(vatAmount.toFixed(2));
       invoice.totalWithVat = Number(exactTotalWithVat.toFixed(2));
@@ -226,7 +200,150 @@ export class InvoicesService {
       invoice.items = invoiceItems;
     }
 
-    // 4. Зачувување на ажурираната фактура со новите пресметки
     return this.invoiceRepository.save(invoice);
+  }
+
+  async updateStatus(id: number, nextStatus: InvoiceStatus): Promise<Invoice> {
+    // 1. Најди ја фактурата во базата
+    const invoice = await this.invoiceRepository.findOne({ where: { id } });
+
+    if (!invoice) {
+      throw new NotFoundException(`Фактурата со ID ${id} не е пронајдена.`);
+    }
+
+    if (invoice.status === InvoiceStatus.CANCELED) {
+      throw new BadRequestException(
+        'Фактурата е веќе сторнирана. Не се дозволени понатамошни измени на статусот.',
+      );
+    }
+
+    invoice.status = nextStatus;
+
+    // Опционално: Овде во иднина можеш да додадеш логика, на пример:
+    // if (nextStatus === InvoiceStatus.PAID) { ... генерирај сметководствен налог за уплата ... }
+
+    return await this.invoiceRepository.save(invoice);
+  }
+
+  async sendInvoiceToEmail(
+    id: number,
+  ): Promise<{ success: boolean; message: string }> {
+    const invoice = await this.invoiceRepository
+      .createQueryBuilder('invoice')
+      .leftJoinAndSelect('invoice.client', 'client')
+      .leftJoinAndSelect('invoice.company', 'company')
+      .addSelect('company.smtpPass')
+      .leftJoinAndSelect('invoice.items', 'items')
+      .where('invoice.id = :id', { id })
+      .getOne();
+
+    if (!invoice)
+      throw new NotFoundException(`Фактурата со ID ${id} не постои.`);
+    if (!invoice.client || !invoice.client.email)
+      throw new BadRequestException('Клиентот нема е-маил.');
+
+    const company = invoice.company;
+
+    if (!company.smtpHost || !company.smtpUser || !company.smtpPass) {
+      throw new BadRequestException(
+        `Фирмата "${company.name}" нема конфигурирано SMTP меил сервер во Поставки.`,
+      );
+    }
+
+    try {
+      const dynamicTransporter = nodemailer.createTransport({
+        host: company.smtpHost,
+        port: company.smtpPort,
+        secure: company.smtpPort === 465,
+        auth: {
+          user: company.smtpUser,
+          pass: company.smtpPass,
+        },
+      });
+
+      const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
+
+      const pdfBuffer = await this.pdfService.generateInvoicePdf(
+        formattedTemplateData,
+      );
+
+      await dynamicTransporter.sendMail({
+        from: `"${company.name}" <${company.smtpUser}>`,
+        to: invoice.client.email,
+        subject: `Нова фактура бр. ${invoice.invoiceNo} од ${company.name}`,
+        html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2>Почитувани,</h2>
+          <p>Во прилог на овој е-маил Ви ја доставуваме официјалната фактура со број <strong>${invoice.invoiceNo}</strong>.</p>
+          <p>Вкупен износ за уплата: <strong>${invoice.finalPayable} ден.</strong></p>
+          <br />
+          <p>Со почит,<br /><strong>${company.name}</strong></p>
+        </div>
+      `,
+        attachments: [
+          {
+            filename: `Faktura-${invoice.invoiceNo}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf',
+          },
+        ],
+      });
+
+      return {
+        success: true,
+        message: `Успешно испратена фактура од име на ${company.name}`,
+      };
+    } catch (error) {
+      console.error(`Грешка при испраќање меил:`, error);
+      throw new BadRequestException('Грешка при обработка на меилот.');
+    }
+  }
+
+  public mapInvoiceToTemplateData(dbInvoice: any): any {
+    return {
+      invoiceNumber: dbInvoice.invoiceNo,
+      companyName: dbInvoice.company?.name || 'Моја Компанија',
+      companyEdb: dbInvoice.company?.edb || '',
+      companyAddress: dbInvoice.company?.address || '',
+      companyPhone: dbInvoice.company?.phone || '',
+      companyEmail: dbInvoice.company?.email || '',
+      companyBank: dbInvoice.company?.bankName || '',
+      clientName: dbInvoice.client?.name || 'Непознат Клиент',
+      clientEdb: dbInvoice.client?.edb || '',
+      clientAddress: dbInvoice.client?.address || '',
+      date: new Date(dbInvoice.created_at).toLocaleDateString('mk-MK'),
+      dueDate: dbInvoice.dueDate
+        ? new Date(dbInvoice.dueDate).toLocaleDateString('mk-MK')
+        : '',
+
+      items: (dbInvoice.items || []).map((item: any, index: number) => {
+        const quantity = Number(item.quantity);
+        const price = Number(item.price);
+        const discountPercent = Number(item.discountPercent ?? 0);
+        const vatRate = Number(item.vatRate ?? 18);
+
+        const priceAfterDiscount = price * (1 - discountPercent / 100);
+        const itemSubtotal = priceAfterDiscount * quantity;
+
+        return {
+          rbr: index + 1,
+          description: item.description || '',
+          unitOfMeasure: item.unitOfMeasure || 'ПАР',
+          quantity: quantity,
+          price: price.toFixed(2),
+          discountPercent: discountPercent > 0 ? `${discountPercent}%` : '/',
+          priceWithDiscount: priceAfterDiscount.toFixed(2),
+          itemSubtotal: itemSubtotal.toFixed(2),
+          vatRate: `${vatRate}%`,
+        };
+      }),
+
+      subtotalAmount: Number(dbInvoice.subtotalAmount || 0).toFixed(2),
+      vatAmount: Number(dbInvoice.vatAmount || 0).toFixed(2),
+      totalWithVat: Number(dbInvoice.totalWithVat || 0).toFixed(2),
+      roundingAmount: Number(dbInvoice.roundingAmount || 0).toFixed(2),
+      finalPayable: Number(dbInvoice.finalPayable || 0),
+      note: dbInvoice.note,
+    };
   }
 }

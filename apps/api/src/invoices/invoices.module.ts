@@ -7,6 +7,7 @@ import { InvoiceItem } from './entities/invoice-item.entity';
 import { AuthModule } from '../auth/auth.module';
 import { Client } from 'src/clients/entities/client.entity';
 import { PdfModule } from 'src/pdf/pdf.module';
+import { InvoiceCronService } from './invoice-cron.service';
 
 @Module({
   imports: [
@@ -14,6 +15,6 @@ import { PdfModule } from 'src/pdf/pdf.module';
     PdfModule,
   ],
   controllers: [InvoicesController],
-  providers: [InvoicesService],
+  providers: [InvoicesService, InvoiceCronService],
 })
 export class InvoicesModule {}

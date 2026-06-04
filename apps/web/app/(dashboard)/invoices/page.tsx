@@ -24,6 +24,10 @@ import AddIcon from "@mui/icons-material/Add";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import DownloadIcon from "@mui/icons-material/Download";
+import EmailIcon from "@mui/icons-material/Email";
+import InvoiceStatusManager, {
+  InvoiceStatus,
+} from "../../components/invoices/InvoiceStatusManager";
 
 // Дефинирање на интерфејс за типот на фактура што доаѓа од бекендот
 interface Invoice {
@@ -35,30 +39,56 @@ interface Invoice {
   clientId: number;
   dueDate: string;
   finalPayable: number;
-  status?: string;
+  status: InvoiceStatus;
 }
 
 export default function InvoicesListPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
+
+  // 2. Функција за повик до бекендот за испраќање меил
+  const handleSendEmail = async (id: number, invoiceNo: string) => {
+    try {
+      setSendingEmailId(id);
+
+      // Повик до бекендот (POST /invoices/:id/send-email)
+      await api.post(`/invoices/${id}/send-email`);
+
+      alert(
+        `Фактурата ${invoiceNo} е успешно испратена на е-маил до клиентот.`,
+      );
+
+      // По избор: Освежи ги фактурите ако испраќањето го менува статусот во SENT
+      fetchInvoices();
+    } catch (err: any) {
+      console.error("Грешка при праќање е-маил:", err);
+      alert(
+        `Неуспешно праќање: ${err.response?.data?.message || "Системска грешка."}`,
+      );
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
 
   // Повлекување на фактурите од бекенд базата
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get("/invoices");
-        setInvoices(response.data);
-        setError(null);
-      } catch (err: any) {
-        console.error("Грешка при влечење фактури:", err);
-        setError("Неуспешно вчитување на фактурите од базата.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get("/invoices");
+      setInvoices(response.data);
+      setError(null);
+    } catch (err: any) {
+      console.error("Грешка при влечење фактури:", err);
+      setError("Неуспешно вчитување на фактурите од базата.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // 2. Во useEffect само ја повикуваме за иницијално вчитување
+  useEffect(() => {
     fetchInvoices();
   }, []);
 
@@ -201,16 +231,16 @@ export default function InvoicesListPage() {
                     <TableCell sx={{ fontWeight: "500" }}>
                       {invoice.finalPayable || 0} ден.
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={
-                          invoice.status === "PAID" ? "Платена" : "Неплатена"
-                        }
-                        color={
-                          invoice.status === "PAID" ? "success" : "warning"
-                        }
-                        size="small"
-                        sx={{ fontWeight: "bold" }}
+
+                    <TableCell align="center">
+                      <InvoiceStatusManager
+                        invoiceId={invoice.id}
+                        currentStatus={invoice.status}
+                        onStatusChangeSuccess={(newStatus: string) => {
+                          console.log(newStatus, "New Status");
+                          fetchInvoices();
+                        }}
+                        dueDate={invoice.dueDate}
                       />
                     </TableCell>
 
@@ -267,6 +297,35 @@ export default function InvoicesListPage() {
                           >
                             <DownloadIcon fontSize="small" />
                           </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Испрати на е-маил">
+                          <span>
+                            {" "}
+                            {/* Спан е тука за да работи Tooltip-от кога копчето е disabled */}
+                            <IconButton
+                              onClick={() =>
+                                handleSendEmail(invoice.id, invoice.invoiceNo)
+                              }
+                              disabled={
+                                sendingEmailId !== null ||
+                                invoice.status === "CANCELED"
+                              }
+                              size="small"
+                              sx={{
+                                color: "#7c3aed", // Виолетова боја за е-маил акција
+                                "&:hover": { color: "#6d28d9" },
+                              }}
+                            >
+                              {sendingEmailId === invoice.id ? (
+                                <CircularProgress
+                                  size={18}
+                                  sx={{ color: "#7c3aed" }}
+                                />
+                              ) : (
+                                <EmailIcon fontSize="small" />
+                              )}
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       </Box>
                     </TableCell>

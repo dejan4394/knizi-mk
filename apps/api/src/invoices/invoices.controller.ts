@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   Patch,
+  ParseIntPipe,
   // Delete,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
@@ -22,6 +23,8 @@ import { PdfService } from 'src/pdf/pdf.service';
 import express from 'express'; // <--- ОВА Е КЛУЧНОТО! Мора да е од 'express'
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
+import { Invoice } from './entities/invoice.entity';
 
 interface AuthenticatedUser {
   userId: number;
@@ -78,7 +81,6 @@ export class InvoicesController {
   ) {
     try {
       const companyId = req.user.companyId;
-      console.log(companyId, 'company id');
 
       const dbInvoice = await this.invoicesService.findOne(Number(id));
 
@@ -92,52 +94,8 @@ export class InvoicesController {
           .json({ message: 'Немате овластување за овој документ.' });
       }
 
-      const invoiceDataForTemplate = {
-        invoiceNumber: dbInvoice.invoiceNo,
-        companyName: dbInvoice.company?.name || 'Моја Компанија',
-        companyEdb: dbInvoice.company?.edb || '',
-        companyAddress: dbInvoice.company?.address || '',
-        companyPhone: dbInvoice.company?.phone || '',
-        companyEmail: dbInvoice.company?.email || '',
-        companyBank: dbInvoice.company?.bankName || '',
-        clientName: dbInvoice.client?.name || 'Непознат Клиент',
-        clientEdb: dbInvoice.client?.edb || '',
-        clientAddress: dbInvoice.client?.address || '',
-        date: new Date(dbInvoice.created_at).toLocaleDateString('mk-MK'),
-        dueDate: dbInvoice.dueDate
-          ? new Date(dbInvoice.dueDate).toLocaleDateString('mk-MK')
-          : '',
-
-        items: dbInvoice.items.map((item: InvoiceItem, index: number) => {
-          const quantity = Number(item.quantity);
-          const price = Number(item.price);
-          const discountPercent = Number(item.discountPercent ?? 0); // Пази: ?? наместо || за да не ја голтне нулата
-          const vatRate = Number(item.vatRate ?? 18);
-
-          // Пресметка на цената по ставка со вклучен попуст
-          const priceAfterDiscount = price * (1 - discountPercent / 100);
-          const itemSubtotal = priceAfterDiscount * quantity;
-
-          return {
-            rbr: index + 1,
-            description: item.description || '',
-            unitOfMeasure: item.unitOfMeasure || 'ПАР',
-            quantity: quantity,
-
-            price: price.toFixed(2),
-            discountPercent: discountPercent > 0 ? `${discountPercent}%` : '/',
-            priceWithDiscount: priceAfterDiscount.toFixed(2),
-            itemSubtotal: itemSubtotal.toFixed(2),
-            vatRate: `${vatRate}%`,
-          };
-        }),
-
-        subtotalAmount: Number(dbInvoice.subtotalAmount || 0).toFixed(2),
-        vatAmount: Number(dbInvoice.vatAmount || 0).toFixed(2),
-        totalWithVat: Number(dbInvoice.totalWithVat || 0).toFixed(2),
-        roundingAmount: Number(dbInvoice.roundingAmount || 0).toFixed(2),
-        finalPayable: Number(dbInvoice.finalPayable || 0),
-      };
+      const invoiceDataForTemplate =
+        this.invoicesService.mapInvoiceToTemplateData(dbInvoice);
 
       const pdfBuffer = await this.pdfService.generateInvoicePdf(
         invoiceDataForTemplate,
@@ -172,5 +130,20 @@ export class InvoicesController {
       updateInvoiceDto,
       Number(companyId),
     );
+  }
+
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard)
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateStatusDto: UpdateInvoiceStatusDto,
+  ): Promise<Invoice> {
+    return await this.invoicesService.updateStatus(id, updateStatusDto.status);
+  }
+
+  @Post(':id/send-email')
+  @UseGuards(JwtAuthGuard)
+  async sendInvoiceEmail(@Param('id', ParseIntPipe) id: number) {
+    return await this.invoicesService.sendInvoiceToEmail(id);
   }
 }

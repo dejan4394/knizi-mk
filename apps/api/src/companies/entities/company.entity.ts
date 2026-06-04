@@ -26,7 +26,18 @@ export class Company extends Base {
 
   @Column({ nullable: true })
   email?: string;
-  // ------------------------
+
+  @Column({ nullable: true })
+  smtpHost?: string;
+
+  @Column({ type: 'int', nullable: true, default: 465 })
+  smtpPort?: number;
+
+  @Column({ nullable: true })
+  smtpUser?: string;
+
+  @Column({ nullable: true, select: false }) // select: false за безбедност, да не ја влече лозинката во обични кверија
+  smtpPass?: string;
 
   @OneToMany(() => Invoice, (invoice) => invoice.company)
   invoices!: Invoice[];

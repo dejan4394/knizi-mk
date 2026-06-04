@@ -12,6 +12,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import * as nodemailer from 'nodemailer';
 import { PdfService } from 'src/pdf/pdf.service';
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 @Injectable()
 export class InvoicesService {
@@ -254,19 +255,25 @@ export class InvoicesService {
     try {
       const isSecurePort = company.smtpPort === 465;
 
-      const dynamicTransporter = nodemailer.createTransport({
+      const transportOptions: SMTPTransport.Options = {
         host: company.smtpHost,
         port: company.smtpPort,
-        secure: isSecurePort, // 465 = true, 587 = false
+        secure: isSecurePort,
         auth: {
           user: company.smtpUser,
           pass: company.smtpPass,
         },
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        // Забелешка: Точното име на својството во nodemailer е за претпочитање на IPv4 e 'insecureAuth' или преку tls со фамилија,
+        // но доколку користиш специфична верзија, со импортот на SMTPTransport си безбеден.
         tls: {
           rejectUnauthorized: false,
         },
-        connectionTimeout: 15000,
-      });
+      };
+
+      const dynamicTransporter = nodemailer.createTransport(transportOptions);
 
       const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
       const pdfBuffer = await this.pdfService.generateInvoicePdf(

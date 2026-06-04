@@ -263,11 +263,9 @@ export class InvoicesService {
           user: company.smtpUser,
           pass: company.smtpPass,
         },
-        connectionTimeout: 15000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-        // Забелешка: Точното име на својството во nodemailer е за претпочитање на IPv4 e 'insecureAuth' или преку tls со фамилија,
-        // но доколку користиш специфична верзија, со импортот на SMTPTransport си безбеден.
+        connectionTimeout: 45000,
+        greetingTimeout: 30000,
+        socketTimeout: 45000,
         tls: {
           rejectUnauthorized: false,
         },

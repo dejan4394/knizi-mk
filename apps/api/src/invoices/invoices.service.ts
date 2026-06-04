@@ -228,6 +228,7 @@ export class InvoicesService {
   async sendInvoiceToEmail(
     id: number,
   ): Promise<{ success: boolean; message: string }> {
+    // 1. Го користиме QueryBuilder за да ја извлечеме фирмата заедно со SMTP лозинката
     const invoice = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.client', 'client')
@@ -262,11 +263,11 @@ export class InvoicesService {
       });
 
       const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
-
       const pdfBuffer = await this.pdfService.generateInvoicePdf(
         formattedTemplateData,
       );
 
+      // 2. Испраќање на е-маилот
       await dynamicTransporter.sendMail({
         from: `"${company.name}" <${company.smtpUser}>`,
         to: invoice.client.email,
@@ -289,9 +290,13 @@ export class InvoicesService {
         ],
       });
 
+      // 3. АЖУРИРАЊЕ НА ДАТУМОТ НА ИСПРАЌАЊЕ ПО УСПЕШЕН МЕИЛ
+      invoice.sentAtDate = new Date(); // Го зема моменталното време во моментот на извршување
+      await this.invoiceRepository.save(invoice); // Спасуваме во база
+
       return {
         success: true,
-        message: `Успешно испратена фактура од име на ${company.name}`,
+        message: `Успешно испратена фактура и ажуриран датум на праќање.`,
       };
     } catch (error) {
       console.error(`Грешка при испраќање меил:`, error);

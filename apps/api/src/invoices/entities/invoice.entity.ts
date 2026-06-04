@@ -61,6 +61,9 @@ export class Invoice extends Base {
   @Column({ type: 'text', nullable: true })
   note?: string;
 
+  @Column({ type: 'timestamp', nullable: true, name: 'sent_at_date' })
+  sentAtDate?: Date | null;
+
   @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: true })
   items!: InvoiceItem[];
 }

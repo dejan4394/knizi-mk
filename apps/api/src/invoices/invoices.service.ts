@@ -252,14 +252,20 @@ export class InvoicesService {
     }
 
     try {
+      const isSecurePort = company.smtpPort === 465;
+
       const dynamicTransporter = nodemailer.createTransport({
         host: company.smtpHost,
         port: company.smtpPort,
-        secure: company.smtpPort === 465,
+        secure: isSecurePort, // 465 = true, 587 = false
         auth: {
           user: company.smtpUser,
           pass: company.smtpPass,
         },
+        tls: {
+          rejectUnauthorized: false,
+        },
+        connectionTimeout: 15000,
       });
 
       const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);

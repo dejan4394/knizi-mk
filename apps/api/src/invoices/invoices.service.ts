@@ -229,12 +229,12 @@ export class InvoicesService {
   async sendInvoiceToEmail(
     id: number,
   ): Promise<{ success: boolean; message: string }> {
-    // 1. Го користиме QueryBuilder за да ја извлечеме фирмата заедно со SMTP лозинката
+    // 1. Извлекување на фактурата со leftJoin за клиент и компанија
     const invoice = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.client', 'client')
       .leftJoinAndSelect('invoice.company', 'company')
-      .addSelect('company.smtpPass')
+      .addSelect('company.smtpPass') // Го вклучуваме заштитеното поле со лозинка/клучеви
       .leftJoinAndSelect('invoice.items', 'items')
       .where('invoice.id = :id', { id })
       .getOne();
@@ -242,70 +242,170 @@ export class InvoicesService {
     if (!invoice)
       throw new NotFoundException(`Фактурата со ID ${id} не постои.`);
     if (!invoice.client || !invoice.client.email)
-      throw new BadRequestException('Клиентот нема е-маил.');
+      throw new BadRequestException('Клиентот нема дефинирано е-маил.');
 
     const company = invoice.company;
 
     if (!company.smtpHost || !company.smtpUser || !company.smtpPass) {
       throw new BadRequestException(
-        `Фирмата "${company.name}" нема конфигурирано SMTP меил сервер во Поставки.`,
+        `Фирмата "${company.name}" нема комплетно конфигурирано е-маил поставки во профилот.`,
       );
     }
 
+    // 2. ПРВО го генерираме PDF-от во меморија за да биде спремен за двата улови
     const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(
       formattedTemplateData,
     );
+    const pdfBase64 = pdfBuffer.toString('base64');
 
-    const isSecurePort = company.smtpPort === 465;
+    const hostLower = company.smtpHost.toLowerCase();
 
-    const transportOptions: SMTPTransport.Options = {
-      host: company.smtpHost,
-      port: company.smtpPort,
-      secure: isSecurePort,
-      auth: {
-        user: company.smtpUser,
-        pass: company.smtpPass,
-      },
-      // Експлицитно форсирање на IPv4 на ниво на сокет на Render
-      connectionTimeout: 20000,
-      greetingTimeout: 20000,
-      socketTimeout: 20000,
-      tls: {
-        rejectUnauthorized: false,
-        minVersion: 'TLSv1.2', // Ова му помага на Yahoo/Gmail да не ја одбие врската од чудни IP адреси
-      },
-    };
+    // -------------------------------------------------------------------------
+    // УСЛОВ 1: ПРАЌАЊЕ ПРЕКУ MAILJET REST API (Ако хостот содржи mailjet)
+    // -------------------------------------------------------------------------
+    if (hostLower.includes('mailjet')) {
+      try {
+        const [apiKey, secretKey] = company.smtpPass.split(':');
+        if (!apiKey || !secretKey) {
+          throw new Error(
+            'Невалиден формат на клучеви. Потребно е API_KEY:SECRET_KEY',
+          );
+        }
 
-    const dynamicTransporter = nodemailer.createTransport(transportOptions);
+        const authString = Buffer.from(`${apiKey}:${secretKey}`).toString(
+          'base64',
+        );
 
-    // 2. Испраќање на е-маилот
-    try {
-      // 3. ПРАЌАЊЕ ВЕДНАШ
-      await dynamicTransporter.sendMail({
-        from: `"${company.name}" <${company.smtpUser}>`,
-        to: invoice.client.email,
-        subject: `Нова фактура бр. ${invoice.invoiceNo} од ${company.name}`,
-        html: `... твојот html ...`,
-        attachments: [
-          {
-            filename: `Faktura-${invoice.invoiceNo}.pdf`,
-            content: pdfBuffer,
-            contentType: 'application/pdf',
+        const response = await fetch('https://api.mailjet.com/v3.1/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Basic ${authString}`,
           },
-        ],
-      });
+          body: JSON.stringify({
+            Messages: [
+              {
+                From: {
+                  Email: company.smtpUser,
+                  Name: company.name,
+                },
+                To: [
+                  {
+                    Email: invoice.client.email,
+                    Name: invoice.client.name || 'Клиент',
+                  },
+                ],
+                Subject: `Нова фактура бр. ${invoice.invoiceNo} од ${company.name}`,
+                HTMLPart: `
+                  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+                    <h2>Почитувани,</h2>
+                    <p>Во прилог на овој е-маил Ви ја доставуваме официјалната фактура со број <strong>${invoice.invoiceNo}</strong>.</p>
+                    <p>Вкупен износ за уплата: <strong>${invoice.finalPayable} ден.</strong></p>
+                    <br />
+                    <p>Со почит,<br /><strong>${company.name}</strong></p>
+                  </div>
+                `,
+                Attachments: [
+                  {
+                    ContentType: 'application/pdf',
+                    Filename: `Faktura-${invoice.invoiceNo}.pdf`,
+                    Base64Content: pdfBase64,
+                  },
+                ],
+              },
+            ],
+          }),
+        });
 
-      invoice.sentAtDate = new Date();
-      await this.invoiceRepository.save(invoice);
+        if (!response.ok) {
+          const contentType = response.headers.get('content-type');
+          const errText =
+            contentType && contentType.includes('application/json')
+              ? JSON.stringify(await response.json())
+              : await response.text();
+          throw new Error(`Mailjet одбивање (${response.status}): ${errText}`);
+        }
 
-      return { success: true, message: `Успешно испратена фактура.` };
-    } catch (error) {
-      const err = error as Error;
-      console.error(`Грешка при испраќање меил:`, err.message);
-      throw new BadRequestException(
-        `Грешка при обработка на меилот: ${err.message}`,
-      );
+        // Ажурирање на датумот при успешност
+        invoice.sentAtDate = new Date();
+        await this.invoiceRepository.save(invoice);
+
+        return {
+          success: true,
+          message: 'Фактурата е успешно испратена преку Mailjet REST API.',
+        };
+      } catch (error) {
+        const err = error as Error;
+        console.error('Mailjet API Грешка:', err.message);
+        throw new BadRequestException(
+          `Грешка при испраќање преку Mailjet: ${err.message}`,
+        );
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // УСЛОВ 2: КЛАСИЧЕН SMTP ТРАНСПОРТ (За сите останати провајдери - Yahoo, Gmail, итн.)
+    // -------------------------------------------------------------------------
+    else {
+      const isSecurePort = company.smtpPort === 465;
+
+      const transportOptions: SMTPTransport.Options = {
+        host: company.smtpHost,
+        port: company.smtpPort,
+        secure: isSecurePort,
+        auth: {
+          user: company.smtpUser,
+          pass: company.smtpPass, // Овде се очекува класична или апликациска лозинка
+        },
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: {
+          rejectUnauthorized: false, // Го спречува паѓањето на Render поради SSL
+        },
+      };
+
+      const dynamicTransporter = nodemailer.createTransport(transportOptions);
+
+      try {
+        await dynamicTransporter.sendMail({
+          from: `"${company.name}" <${company.smtpUser}>`,
+          to: invoice.client.email,
+          subject: `Нова фактура бр. ${invoice.invoiceNo} од ${company.name}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+              <h2>Почитувани,</h2>
+              <p>Во прилог на овој е-маил Ви ја доставуваме официјалната фактура со број <strong>${invoice.invoiceNo}</strong>.</p>
+              <p>Вкупен износ за уплата: <strong>${invoice.finalPayable} ден.</strong></p>
+              <br />
+              <p>Со почит,<br /><strong>${company.name}</strong></p>
+            </div>
+          `,
+          attachments: [
+            {
+              filename: `Faktura-${invoice.invoiceNo}.pdf`,
+              content: pdfBuffer, // Nodemailer прифаќа директно сиров Buffer
+              contentType: 'application/pdf',
+            },
+          ],
+        });
+
+        // Ажурирање на датумот при успешност
+        invoice.sentAtDate = new Date();
+        await this.invoiceRepository.save(invoice);
+
+        return {
+          success: true,
+          message: 'Фактурата е успешно испратена преку класичен SMTP.',
+        };
+      } catch (error) {
+        const err = error as Error;
+        console.error('Класична SMTP Грешка:', err.message);
+        throw new BadRequestException(
+          `Грешка при SMTP конекцијата: ${err.message}`,
+        );
+      }
     }
   }
 

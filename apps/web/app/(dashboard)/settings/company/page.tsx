@@ -15,11 +15,15 @@ import {
   Divider,
   IconButton,
   InputAdornment,
+  Link, // ДОДАДЕНО: MUI Link компонента
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import BusinessIcon from "@mui/icons-material/Business";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import LaunchIcon from "@mui/icons-material/Launch"; // ДОДАДЕНО: Икона за надворешен линк
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { Tooltip } from "@mui/material";
 
 export default function MyCompanySettingsPage() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -35,11 +39,10 @@ export default function MyCompanySettingsPage() {
     bankName: "",
     phone: "",
     email: "",
-    // Новите SMTP полиња:
     smtpHost: "",
     smtpPort: 465,
     smtpUser: "",
-    smtpPass: "", // За безбедност, ова поле ќе биде празно при вчитавање
+    smtpPass: "",
   });
 
   useEffect(() => {
@@ -56,11 +59,10 @@ export default function MyCompanySettingsPage() {
             bankName: response.data.bankName || "",
             phone: response.data.phone || "",
             email: response.data.email || "",
-            // Ги полниме SMTP вредностите од базата (освен лозинката)
             smtpHost: response.data.smtpHost || "",
             smtpPort: response.data.smtpPort || 465,
             smtpUser: response.data.smtpUser || "",
-            smtpPass: "", // Секогаш ја иницијализираме празна на фронтенд
+            smtpPass: "",
           });
         }
       } catch (err: any) {
@@ -81,17 +83,14 @@ export default function MyCompanySettingsPage() {
     try {
       setSaving(true);
 
-      // Подготовка на податоците за праќање
       const payload = {
         ...companyData,
         smtpPort: Number(companyData.smtpPort),
-        // Ако лозинката е празна, праќаме undefined за бекендот да не ја пребрише постоечката во базата
         smtpPass: companyData.smtpPass || undefined,
       };
 
       await api.put("/companies/my-company", payload);
 
-      // Ја чистиме состојбата за лозинката по успешно зачувување
       setCompanyData((prev) => ({ ...prev, smtpPass: "" }));
       alert("Податоците за вашата фирма се успешно зачувани!");
     } catch (err: any) {
@@ -245,14 +244,13 @@ export default function MyCompanySettingsPage() {
               />
             </Grid>
 
-            {/* НОВА СЕКЦИЈА: SMTP Е-МАИЛ ПОСТАВКИ ЗА SAAS ИЗОЛАЦИЈА */}
             <Grid size={{ xs: 12 }}>
               <Divider sx={{ my: 2 }}>
                 <Typography
                   variant="body2"
                   sx={{ color: "#7c3aed", fontWeight: "600" }}
                 >
-                  Поставки за излезен е-маил сервер (SMTP)
+                  Поставки за излезен е-маил сервер (Mailjet / SMTP)
                 </Typography>
               </Divider>
             </Grid>
@@ -261,7 +259,7 @@ export default function MyCompanySettingsPage() {
               <TextField
                 label="SMTP Опслужувач (Host)"
                 fullWidth
-                placeholder="на пр. smtp.mail.yahoo.com или smtp.gmail.com"
+                placeholder="на пр. api.mailjet.com или smtp.mail.yahoo.com"
                 value={companyData.smtpHost}
                 onChange={(e) => handleChange("smtpHost", e.target.value)}
               />
@@ -272,7 +270,7 @@ export default function MyCompanySettingsPage() {
                 label="Порт (Port)"
                 fullWidth
                 type="number"
-                placeholder="465 или 587"
+                placeholder="465, 587 или 443"
                 value={companyData.smtpPort}
                 onChange={(e) => handleChange("smtpPort", e.target.value)}
               />
@@ -283,7 +281,7 @@ export default function MyCompanySettingsPage() {
                 label="SMTP Корисничко име / Маил"
                 fullWidth
                 type="email"
-                placeholder="username@domain.com"
+                placeholder="вашиот_верификуван_меил@домен.com"
                 value={companyData.smtpUser}
                 onChange={(e) => handleChange("smtpUser", e.target.value)}
               />
@@ -303,7 +301,6 @@ export default function MyCompanySettingsPage() {
                 onChange={(e) => handleChange("smtpPass", e.target.value)}
                 slotProps={{
                   input: {
-                    // ОВА ГО СПРЕЧУВА ПРЕДЛИСТУВАЧОТ ДА СТАВА АВТОМАТСКИ ЛОЗИНКИ:
                     autoComplete: "new-password",
                     endAdornment: (
                       <InputAdornment position="end">
@@ -323,15 +320,136 @@ export default function MyCompanySettingsPage() {
                 }}
               />
             </Grid>
+
+            {/* АЖУРИРАНО: Вклучено и in-v3.mailjet.com со икона за брзо копирање */}
             <Grid size={{ xs: 12 }}>
-              <Typography
-                variant="caption"
-                sx={{ color: "#94a3b8", display: "block", px: 0.5 }}
+              <Box
+                sx={{
+                  backgroundColor: "#f8fafc",
+                  borderLeft: "4px solid #7c3aed",
+                  p: 2,
+                  borderRadius: "0 8px 8px 0",
+                  mt: 0.5,
+                }}
               >
-                * Напомена: Потребно е да генерирате специјална апликациска
-                лозинка (App Password) од безбедносните поставки на вашиот
-                е-маил провајдер.
-              </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "#334155",
+                    display: "block",
+                    fontSize: "12px",
+                    mb: 1,
+                    fontWeight: "500",
+                  }}
+                >
+                  * Упатство за поврзување со <strong>Mailjet</strong>:
+                </Typography>
+                <Typography
+                  variant="caption"
+                  component="div" // Променето во div за да дозволи блок елементи внатре
+                  sx={{
+                    color: "#64748b",
+                    display: "block",
+                    fontSize: "11.5px",
+                    lineHeight: 1.8,
+                  }}
+                >
+                  1. Креирајте профил или најавете се на{" "}
+                  <Link
+                    href="https://app.mailjet.com/auth/login"
+                    target="_blank"
+                    rel="noopener"
+                    sx={{
+                      color: "#7c3aed",
+                      fontWeight: "bold",
+                      inlineFlex: "center",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Mailjet Dashboard{" "}
+                    <LaunchIcon
+                      sx={{ fontSize: 12, ml: 0.3, verticalAlign: "middle" }}
+                    />
+                  </Link>
+                  .<br />
+                  2. Во полињата погоре внесете ги следните SMTP параметри:
+                  <br />• Хост:{" "}
+                  <Box
+                    component="span"
+                    sx={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 0.5,
+                    }}
+                  >
+                    <code
+                      style={{
+                        backgroundColor: "#e2e8f0",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        color: "#0f172a",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      in-v3.mailjet.com
+                    </code>
+                    <Tooltip title="Копирај хост" placement="top" arrow>
+                      <IconButton
+                        size="small"
+                        sx={{ p: 0.3, color: "#7c3aed" }}
+                        onClick={() => {
+                          navigator.clipboard.writeText("in-v3.mailjet.com");
+                          // alert("Хостот е копиран во таблата!");
+                        }}
+                      >
+                        <ContentCopyIcon sx={{ fontSize: 13 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <br />• Порт:{" "}
+                  <code
+                    style={{
+                      backgroundColor: "#e2e8f0",
+                      padding: "2px 4px",
+                      borderRadius: "4px",
+                      color: "#0f172a",
+                    }}
+                  >
+                    465
+                  </code>{" "}
+                  или{" "}
+                  <code
+                    style={{
+                      backgroundColor: "#e2e8f0",
+                      padding: "2px 4px",
+                      borderRadius: "4px",
+                      color: "#0f172a",
+                    }}
+                  >
+                    587
+                  </code>
+                  .<br />
+                  3. Одете во{" "}
+                  <strong>Account Settings &gt; API Key Management</strong> на
+                  Mailjet за да ги земете вашите клучеви.
+                  <br />
+                  4. Во полето <strong>Корисничко име</strong> внесете го вашиот
+                  верификуван е-маил, а во полето <strong>Лозинка</strong>{" "}
+                  залепете ги клучевите во следниов формат:{" "}
+                  <code
+                    style={{
+                      backgroundColor: "#e2e8f0",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      color: "#0f172a",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    API_KEY:SECRET_KEY
+                  </code>{" "}
+                  (разделени со две точки).
+                </Typography>
+              </Box>
             </Grid>
           </Grid>
         </CardContent>

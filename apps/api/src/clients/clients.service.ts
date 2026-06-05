@@ -1,4 +1,9 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Client } from './entities/client.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -30,5 +35,32 @@ export class ClientsService {
     return await this.clientRepository.find({
       order: { name: 'ASC' },
     });
+  }
+
+  async update(id: number, updateClientDto: Partial<Client>): Promise<Client> {
+    // 1. Провери дали клиентот со тоа ID воопшто постои во базата
+    const client = await this.clientRepository.findOne({ where: { id } });
+    if (!client) {
+      throw new NotFoundException(`Клиентот со ID ${id} не е пронајден.`);
+    }
+
+    // 2. Безбедносна проверка за Единствен Даночен Број (ЕДБ)
+    // Ако се менува ЕДБ-то, провери да не веќе постои друга фирма со тој број
+    if (updateClientDto.edb && updateClientDto.edb !== client.edb) {
+      const edbExists = await this.clientRepository.findOne({
+        where: { edb: updateClientDto.edb },
+      });
+      if (edbExists) {
+        throw new BadRequestException(
+          'Веќе постои друг комитент со тој ЕДБ број.',
+        );
+      }
+    }
+
+    // 3. Спојување на новите податоци врз старите
+    Object.assign(client, updateClientDto);
+
+    // 4. Зачувување во базата на податоци
+    return await this.clientRepository.save(client);
   }
 }

@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Put,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { Client } from './entities/client.entity';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -17,5 +26,13 @@ export class ClientsController {
   @Get()
   async findAll(): Promise<Client[]> {
     return await this.clientsService.findAll();
+  }
+
+  @Put(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateClientDto: Partial<Client>,
+  ) {
+    return this.clientsService.update(id, updateClientDto);
   }
 }

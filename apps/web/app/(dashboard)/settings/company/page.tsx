@@ -128,16 +128,39 @@ export default function MyCompanySettingsPage() {
       onSubmit={handleSubmit}
       sx={{ maxWidth: "800px", margin: "0 auto" }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 4 }}>
-        <BusinessIcon sx={{ fontSize: 40, color: "#0070f3" }} />
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 2,
+          mb: 4,
+          width: "100%",
+        }}
+      >
+        {/* <BusinessIcon sx={{ fontSize: 40, color: "#0070f3" }} /> */}
         <Box>
           <Typography
-            variant="h4"
-            sx={{ fontWeight: "bold", color: "#0f172a" }}
+            component="h1"
+            sx={{
+              fontWeight: "bold",
+              color: "#0f172a",
+              fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
+              lineHeight: 1.2,
+              textAlign: { xs: "center", sm: "left" },
+              width: { xs: "100%", sm: "auto" },
+            }}
           >
             Профил на Мојата Фирма
           </Typography>
-          <Typography variant="body2" color="textSecondary">
+          <Typography
+            variant="body2"
+            color="textSecondary"
+            sx={{
+              textAlign: { xs: "center", sm: "left" },
+              width: { xs: "100%", sm: "auto" },
+            }}
+          >
             Уредете ги генералиите и SMTP е-маил поставките на вашата компанија
             за правилно издавање на фактурите.
           </Typography>

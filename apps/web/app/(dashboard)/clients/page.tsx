@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-// Осигурај се дека оваа патека точно води до твојот конфигуриран axios инстанца
 import api from "../../utils/services/api";
 
 import {
@@ -22,16 +21,19 @@ import {
   TextField,
   Grid,
   CircularProgress,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
+import EditIcon from "@mui/icons-material/Edit"; // ДОДАДЕНО: Икона за измена
 
 interface Client {
   id: number;
   name: string;
-  edb: string; // Даночен број
+  edb: string;
   address: string;
-  accountNo?: string; // Жиро сметка
+  accountNo?: string;
   email?: string;
 }
 
@@ -43,8 +45,11 @@ export default function ClientsPage() {
   // Држава за модалот (Дијалогот)
   const [openModal, setOpenModal] = useState<boolean>(false);
 
-  // Форма држава за нов клиент
-  const [newClient, setNewClient] = useState({
+  // ДОДАДЕНО: Следење дали модалот е во режим на уредување (чува објект или null)
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+  // Форма држава за клиент
+  const [formData, setFormData] = useState({
     name: "",
     edb: "",
     address: "",
@@ -56,12 +61,12 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/clients"); // Рутата на NestJS бекендот
+      const response = await api.get("/clients");
       setClients(response.data);
       setError(null);
     } catch (err: any) {
       console.error("Грешка при влечење клиенти:", err);
-      setError("Неуспешно вчитување на клиентите од базата.");
+      setError("Неуспешно vчитување на клиентите од базата.");
     } finally {
       setLoading(false);
     }
@@ -71,37 +76,58 @@ export default function ClientsPage() {
     fetchClients();
   }, []);
 
-  // 2. Испраќање нов клиент до бекендот
+  // ДОДАДЕНО: Функција за отворање на модалот во режим на "Нов Клиент"
+  const handleOpenCreateModal = () => {
+    setEditingClient(null);
+    setFormData({
+      name: "",
+      edb: "",
+      address: "",
+      accountNo: "",
+      email: "",
+    });
+    setOpenModal(true);
+  };
+
+  // ДОДАДЕНО: Функција за отворање на модалот во режим на "Измена (Edit)"
+  const handleOpenEditModal = (client: Client) => {
+    setEditingClient(client);
+    setFormData({
+      name: client.name || "",
+      edb: client.edb || "",
+      address: client.address || "",
+      accountNo: client.accountNo || "",
+      email: client.email || "",
+    });
+    setOpenModal(true);
+  };
+
+  // 2. Заеднички Handler за зачувување (Креирање или Ажурирање)
   const handleSubmitClient = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post("/clients", newClient);
-      if (response.status === 201 || response.status === 200) {
+      if (editingClient) {
+        // РЕЖИМ: АЖУРИРАЊЕ (PUT повик со ID на клиентот)
+        await api.put(`/clients/${editingClient.id}`, formData);
+        alert("Податоците за клиентот се успешно ажурирани!");
+      } else {
+        // РЕЖИМ: КРЕИРАЊЕ (POST повик за нов клиент)
+        await api.post("/clients", formData);
         alert("Клиентот е успешно зачуван!");
-        setOpenModal(false); // Затвори го модалот
-
-        // Ресетирај ја формата на празни вредности
-        setNewClient({
-          name: "",
-          edb: "",
-          address: "",
-          accountNo: "",
-          email: "",
-        });
-
-        // Освежи ја табелата со новите податоци од базата
-        fetchClients();
       }
+
+      setOpenModal(false);
+      fetchClients(); // Освежи ја табелата
     } catch (err: any) {
-      console.error("Грешка при креирање клиент:", err);
+      console.error("Грешка при процесирање на клиентот:", err);
       alert(
-        `Грешка: ${err.response?.data?.message || "Неуспешно зачувување."}`,
+        `Грешка: ${err.response?.data?.message || "Операцијата не е зачувана."}`,
       );
     }
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setNewClient((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -110,24 +136,38 @@ export default function ClientsPage() {
       <Box
         sx={{
           display: "flex",
-          justifyContent: "space-between",
+          flexDirection: { xs: "column", sm: "row" },
           alignItems: "center",
+          justifyContent: "space-between",
+          gap: 2,
           mb: 4,
+          width: "100%",
         }}
       >
-        <Typography variant="h4" sx={{ fontWeight: "bold", color: "#0f172a" }}>
+        <Typography
+          component="h1"
+          sx={{
+            fontWeight: "bold",
+            color: "#0f172a",
+            fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
+            lineHeight: 1.2,
+            textAlign: { xs: "center", sm: "left" },
+            width: { xs: "100%", sm: "auto" },
+          }}
+        >
           Менаџирање со Клиенти (Комитенти)
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => setOpenModal(true)}
+          onClick={handleOpenCreateModal} // ИЗМЕНЕТО: Повикува ресет-форма
           sx={{
             backgroundColor: "#0070f3",
             textTransform: "none",
             fontWeight: "bold",
             borderRadius: "8px",
-            "&:hover": { backgroundColor: "#0051bb" },
+            width: { xs: "100%", sm: "auto" },
+            py: { xs: 1.2, sm: 1 },
           }}
         >
           Нов Клиент
@@ -168,7 +208,7 @@ export default function ClientsPage() {
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
-            onClick={() => setOpenModal(true)}
+            onClick={handleOpenCreateModal}
           >
             Додади го првиот клиент
           </Button>
@@ -199,6 +239,13 @@ export default function ClientsPage() {
                 <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
                   Е-пошта
                 </TableCell>
+                {/* ДОДАДЕНО: Колона за Акции */}
+                <TableCell
+                  align="right"
+                  sx={{ fontWeight: "bold", color: "#334155", pr: 3 }}
+                >
+                  Акции
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -211,6 +258,21 @@ export default function ClientsPage() {
                   <TableCell>{client.address}</TableCell>
                   <TableCell>{client.accountNo || "/"}</TableCell>
                   <TableCell>{client.email || "/"}</TableCell>
+                  {/* ДОДАДЕНО: Копче за Edit на секој ред */}
+                  <TableCell align="right" sx={{ pr: 2 }}>
+                    <Tooltip title="Уреди податоци" arrow>
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleOpenEditModal(client)}
+                        sx={{
+                          color: "#0070f3",
+                          "&:hover": { backgroundColor: "#f0f7ff" },
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -218,7 +280,7 @@ export default function ClientsPage() {
         </TableContainer>
       )}
 
-      {/* МУИ Дијалог (Модал) за Додавање Клиент */}
+      {/* МУИ Дијалог (Модал) - Заеднички за Креирање и Измена */}
       <Dialog
         open={openModal}
         onClose={() => setOpenModal(false)}
@@ -226,8 +288,11 @@ export default function ClientsPage() {
         maxWidth="sm"
       >
         <Box component="form" onSubmit={handleSubmitClient}>
+          {/* ДИНАМИЧЕН НАСЛОВ */}
           <DialogTitle sx={{ fontWeight: "bold", pb: 1, pt: 3 }}>
-            Додади Нов Комитент
+            {editingClient
+              ? "Ажурирај Податоци на Комитент"
+              : "Додади Нов Комитент"}
           </DialogTitle>
           <DialogContent dividers sx={{ pt: 2, pb: 3 }}>
             <Grid container spacing={2.5}>
@@ -237,7 +302,7 @@ export default function ClientsPage() {
                   fullWidth
                   required
                   variant="outlined"
-                  value={newClient.name}
+                  value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                 />
               </Grid>
@@ -247,7 +312,7 @@ export default function ClientsPage() {
                   fullWidth
                   required
                   variant="outlined"
-                  value={newClient.edb}
+                  value={formData.edb}
                   onChange={(e) => handleInputChange("edb", e.target.value)}
                 />
               </Grid>
@@ -256,7 +321,7 @@ export default function ClientsPage() {
                   label="Жиро сметка"
                   fullWidth
                   variant="outlined"
-                  value={newClient.accountNo}
+                  value={formData.accountNo}
                   onChange={(e) =>
                     handleInputChange("accountNo", e.target.value)
                   }
@@ -268,7 +333,7 @@ export default function ClientsPage() {
                   fullWidth
                   required
                   variant="outlined"
-                  value={newClient.address}
+                  value={formData.address}
                   onChange={(e) => handleInputChange("address", e.target.value)}
                 />
               </Grid>
@@ -278,7 +343,7 @@ export default function ClientsPage() {
                   type="email"
                   fullWidth
                   variant="outlined"
-                  value={newClient.email}
+                  value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                 />
               </Grid>
@@ -295,19 +360,23 @@ export default function ClientsPage() {
             >
               Откажи
             </Button>
+            {/* ДИНАМИЧЕН ТЕКСТ НА КОПЧЕТО ЗА ЗАЧУВУВАЊЕ */}
             <Button
               type="submit"
               variant="contained"
               startIcon={<SaveIcon />}
               sx={{
-                backgroundColor: "#0070f3",
+                backgroundColor: editingClient ? "#7c3aed" : "#0070f3", // Виолетово за едит, Сино за нов корисник
                 textTransform: "none",
                 fontWeight: "bold",
                 borderRadius: "6px",
                 px: 3,
+                "&:hover": {
+                  backgroundColor: editingClient ? "#6d28d9" : "#0051bb",
+                },
               }}
             >
-              Зачувај Клиент
+              {editingClient ? "Зачувај Измени" : "Зачувај Клиент"}
             </Button>
           </DialogActions>
         </Box>

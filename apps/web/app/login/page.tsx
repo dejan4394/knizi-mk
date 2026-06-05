@@ -42,10 +42,61 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Состојба за поединечни грешки на инпутите
+  const [formErrors, setFormErrors] = useState<{ [key: string]: boolean }>({});
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setFormErrors({}); // Се чистат претходните грешки при секој нов клик
     setSubmitting(true);
+
+    // --- ВАЛИДАЦИЈА ЗА РЕГИСТРАЦИЈА ---
+    if (mode === "register") {
+      const errors: { [key: string]: boolean } = {};
+
+      // 1. Проверка дали полињата се празни
+      if (!companyName.trim()) errors.companyName = true;
+      if (!firstName.trim()) errors.firstName = true;
+      if (!lastName.trim()) errors.lastName = true;
+      if (!email.trim()) errors.email = true;
+      if (!password.trim()) errors.password = true;
+
+      // 2. Паметна проверка за ЕДБ (задолжително + точно 13 цифри)
+      const cleanEdb = edb.trim();
+      if (!cleanEdb || cleanEdb.length !== 13 || isNaN(Number(cleanEdb))) {
+        errors.edb = true;
+      }
+
+      // Ако се детектирани какви било грешки (празни полиња или неточен ЕДБ)
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors); // Ги зачувуваме сите грешки одеднаш без да се пребришат
+
+        // Динамична порака за грешка во Alert боксот
+        if (cleanEdb && (cleanEdb.length !== 13 || isNaN(Number(cleanEdb)))) {
+          setError("ЕДБ мора да содржи точно 13 бројки!");
+        } else {
+          setError("Ве молиме пополнете го секое задолжително поле.");
+        }
+
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // --- ВАЛИДАЦИЈА ЗА НАЈАВА ---
+    if (mode === "login") {
+      const errors: { [key: string]: boolean } = {};
+      if (!email.trim()) errors.email = true;
+      if (!password.trim()) errors.password = true;
+
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        setError("Внесете е-маил и лозинка за најава.");
+        setSubmitting(false);
+        return;
+      }
+    }
 
     try {
       if (mode === "login") {
@@ -54,11 +105,11 @@ export default function LoginPage() {
         login(accessToken, user);
       } else {
         await api.post("/auth/register", {
-          companyName,
-          edb: edb || null,
-          firstName,
-          lastName,
-          ownerEmail: email,
+          companyName: companyName.trim(),
+          edb: edb.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
           password,
         });
 
@@ -67,10 +118,13 @@ export default function LoginPage() {
         );
         setMode("login");
 
+        // Ресетирање на полињата
         setFirstName("");
         setLastName("");
         setCompanyName("");
         setEdb("");
+        setEmail("");
+        setPassword("");
       }
     } catch (err: any) {
       const errorMessage =
@@ -84,8 +138,10 @@ export default function LoginPage() {
   const toggleMode = () => {
     setMode(mode === "login" ? "register" : "login");
     setError("");
+    setFormErrors({}); // Се чистат црвените инпути при промена на екран
   };
 
+  // Константи за деловните бои (Dark Mode)
   const bgMain = "#1e293b";
   const bgCard = "#0f172a";
   const textCyan = "#38bdf8";
@@ -111,11 +167,10 @@ export default function LoginPage() {
     },
     "& .MuiInputLabel-root": {
       color: textMuted,
-      // Го средува преклопувањето на лабелата кај некои верзии на Chrome
       transform: "translate(14px, -9px) scale(0.75) !important",
     },
     "& .MuiInputLabel-root.Mui-focused": { color: accentColor },
-    "& .MuiFormHelperText-root": { color: "rgba(148, 163, 184, 0.7)" },
+    "& .MuiFormHelperText-root": { color: "#f87171" }, // Поубава црвена за хелпер текстот во Dark mode
   };
 
   return (
@@ -140,6 +195,7 @@ export default function LoginPage() {
         }}
       >
         <CardContent sx={{ p: 4 }}>
+          {/* Лого секција */}
           <Box
             sx={{
               display: "flex",
@@ -235,7 +291,10 @@ export default function LoginPage() {
                     variant="outlined"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    // Сè оди внатре во slotProps
+                    error={!!formErrors.companyName}
+                    helperText={
+                      formErrors.companyName ? "Ова поле е задолжително" : ""
+                    }
                     slotProps={{
                       input: { sx: { borderRadius: "8px" } },
                       inputLabel: { shrink: true },
@@ -246,10 +305,14 @@ export default function LoginPage() {
                   <TextField
                     label="ЕДБ / Даночен број"
                     fullWidth
+                    required
                     variant="outlined"
-                    helperText="Опционално поле - може да го внесете и подоцна"
                     value={edb}
                     onChange={(e) => setEdb(e.target.value)}
+                    error={!!formErrors.edb}
+                    helperText={
+                      formErrors.edb ? "Внесете точен ЕДБ (13 бројки)" : ""
+                    }
                     slotProps={{
                       input: { sx: { borderRadius: "8px" } },
                       inputLabel: { shrink: true },
@@ -286,13 +349,14 @@ export default function LoginPage() {
                       variant="outlined"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
+                      error={!!formErrors.firstName}
+                      helperText={formErrors.firstName ? "Задолжително" : ""}
                       slotProps={{
                         input: { sx: { borderRadius: "8px" } },
                         inputLabel: { shrink: true },
                       }}
                       sx={textFieldStyles}
                     />
-
                     <TextField
                       label="Презиме"
                       fullWidth
@@ -300,6 +364,8 @@ export default function LoginPage() {
                       variant="outlined"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
+                      error={!!formErrors.lastName}
+                      helperText={formErrors.lastName ? "Задолжително" : ""}
                       slotProps={{
                         input: { sx: { borderRadius: "8px" } },
                         inputLabel: { shrink: true },
@@ -318,7 +384,8 @@ export default function LoginPage() {
                 variant="outlined"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                // Преместено внатре
+                error={!!formErrors.email}
+                helperText={formErrors.email ? "Внесете валидна е-пошта" : ""}
                 slotProps={{
                   input: { sx: { borderRadius: "8px" } },
                   inputLabel: { shrink: true },
@@ -334,8 +401,9 @@ export default function LoginPage() {
                 variant="outlined"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                error={!!formErrors.password}
+                helperText={formErrors.password ? "Внесете лозинка" : ""}
                 sx={textFieldStyles}
-                // Ги комбинираме и копчето за окото и shrink ефектот во еден slotProps
                 slotProps={{
                   input: {
                     sx: { borderRadius: "8px" },

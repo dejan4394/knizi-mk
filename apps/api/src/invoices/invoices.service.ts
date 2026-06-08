@@ -418,6 +418,7 @@ export class InvoicesService {
       companyPhone: dbInvoice.company?.phone || '',
       companyEmail: dbInvoice.company?.email || '',
       companyBank: dbInvoice.company?.bankName || '',
+      companyBankAccount: dbInvoice.company?.giroAccount || '',
       clientName: dbInvoice.client?.name || 'Непознат Клиент',
       clientEdb: dbInvoice.client?.edb || '',
       clientAddress: dbInvoice.client?.address || '',

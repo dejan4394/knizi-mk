@@ -15,10 +15,13 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Chip,
   CircularProgress,
   IconButton,
   Tooltip,
+  Card,
+  CardContent,
+  Divider,
+  Grid,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -51,19 +54,14 @@ export default function InvoicesListPage() {
   const [error, setError] = useState<string | null>(null);
   const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
 
-  // 2. Функција за повик до бекендот за испраќање меил
+  // Функција за повик до бекендот за испраќање меил
   const handleSendEmail = async (id: number, invoiceNo: string) => {
     try {
       setSendingEmailId(id);
-
-      // Повик до бекендот (POST /invoices/:id/send-email)
       await api.post(`/invoices/${id}/send-email`);
-
       alert(
         `Фактурата ${invoiceNo} е успешно испратена на е-маил до клиентот.`,
       );
-
-      // По избор: Освежи ги фактурите ако испраќањето го менува статусот во SENT
       fetchInvoices();
     } catch (err: any) {
       console.error("Грешка при праќање е-маил:", err);
@@ -90,18 +88,16 @@ export default function InvoicesListPage() {
     }
   };
 
-  // 2. Во useEffect само ја повикуваме за иницијално вчитување
   useEffect(() => {
     fetchInvoices();
   }, []);
 
-  // Логика за преземање на PDF директно од копче во табелата
+  // Логика за преземање на PDF директно од копче
   const handleDownloadPdf = async (id: number, invoiceNo: string) => {
     try {
       const response = await api.get(`/invoices/${id}/pdf`, {
         responseType: "blob",
       });
-
       const blob = new Blob([response.data], { type: "application/pdf" });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
@@ -115,7 +111,8 @@ export default function InvoicesListPage() {
   };
 
   return (
-    <Box>
+    <Box sx={{ px: { xs: 1, sm: 0 } }}>
+      {/* Хедер Секција */}
       <Box
         sx={{
           display: "flex",
@@ -158,6 +155,7 @@ export default function InvoicesListPage() {
           Нова Фактура
         </Button>
       </Box>
+
       {loading ? (
         <Box
           sx={{
@@ -167,11 +165,9 @@ export default function InvoicesListPage() {
             minHeight: "60vh",
           }}
         >
-          {" "}
           <CircularProgress />
         </Box>
       ) : error ? (
-        // 2. Приказ ако има грешка
         <Typography
           color="error"
           variant="body1"
@@ -180,7 +176,6 @@ export default function InvoicesListPage() {
           {error}
         </Typography>
       ) : invoices.length === 0 ? (
-        // 3. Приказ ако базата е празна
         <Paper sx={{ p: 4, textAlign: "center", color: "#64748b" }}>
           <Typography variant="body1">
             Сè уште немате издадено ниту една фактура.
@@ -195,101 +190,313 @@ export default function InvoicesListPage() {
           </Button>
         </Paper>
       ) : (
-        // 4. Реалната табела со податоци од базата
-        <TableContainer
-          component={Paper}
-          sx={{ boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}
-        >
-          <Table>
-            <TableHead sx={{ backgroundColor: "#f8fafc" }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: "bold" }}>Број</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Клиент</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>
-                  Рок за плаќање
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Вкупна сума</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Статус</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Испратено</TableCell>
-                <TableCell
-                  sx={{ fontWeight: "bold", textAlgin: "center" }}
-                  align="center"
-                >
-                  Акции
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {Array.isArray(invoices) &&
-                invoices.map((invoice) => {
-                  const isSent = !!invoice.sentAtDate;
-                  const formattedDate = isSent
-                    ? new Date(invoice.sentAtDate).toLocaleDateString("mk-MK", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit", // Додадено и време за попрецизен преглед
-                      })
-                    : "";
-                  return (
-                    <TableRow key={invoice.id} hover>
-                      <TableCell sx={{ fontWeight: "600", color: "#0070f3" }}>
-                        {invoice.invoiceNo}
-                      </TableCell>
-                      <TableCell>
-                        {invoice.client
-                          ? invoice.client.name
-                          : `Клиент ID: ${invoice.clientId}`}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(invoice.dueDate).toLocaleDateString("mk-MK")}
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: "500" }}>
-                        {invoice.finalPayable || 0} ден.
-                      </TableCell>
+        <>
+          {/* ---------------- SCENARIO A: МОБИЛЕН ПРИКАЗ (КАРТИЧКИ) ---------------- */}
+          <Box
+            sx={{
+              display: { xs: "flex", md: "none" },
+              flexDirection: "column",
+              gap: 2,
+              mb: 2,
+            }}
+          >
+            {Array.isArray(invoices) &&
+              invoices.map((invoice) => {
+                const isSent = !!invoice.sentAtDate;
+                return (
+                  <Card
+                    key={invoice.id}
+                    variant="outlined"
+                    sx={{
+                      borderRadius: "12px",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {/* Горен дел на картичката */}
+                    <Box
+                      sx={{
+                        p: 2,
+                        backgroundColor: "#f8fafc",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        borderBottom: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <Typography sx={{ fontWeight: "700", color: "#0070f3" }}>
+                        # {invoice.invoiceNo}
+                      </Typography>
+                      {/* Менаџер на статус директно на картичката */}
+                      <InvoiceStatusManager
+                        invoiceId={invoice.id}
+                        currentStatus={invoice.status}
+                        onStatusChangeSuccess={() => fetchInvoices()}
+                        dueDate={invoice.dueDate}
+                      />
+                    </Box>
 
-                      <TableCell align="center">
-                        <InvoiceStatusManager
-                          invoiceId={invoice.id}
-                          currentStatus={invoice.status}
-                          onStatusChangeSuccess={(newStatus: string) => {
-                            console.log(newStatus, "New Status");
-                            fetchInvoices();
-                          }}
-                          dueDate={invoice.dueDate}
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        {isSent ? (
-                          <Box
-                            sx={{
-                              display: "flex",
-                              flexDirection: "column",
-                              justifyContent: "center",
-                            }}
+                    {/* Содржина на картичката */}
+                    <CardContent
+                      sx={{
+                        p: 2,
+                        "&:last-child": { pb: 2 },
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 1.5,
+                      }}
+                    >
+                      <Box>
+                        <Typography
+                          variant="caption"
+                          color="textSecondary"
+                          sx={{ display: "block" }}
+                        >
+                          Клиент
+                        </Typography>
+                        <Typography
+                          variant="body1"
+                          sx={{ fontWeight: "600", color: "#1e293b" }}
+                        >
+                          {invoice.client
+                            ? invoice.client.name
+                            : `Клиент ID: ${invoice.clientId}`}
+                        </Typography>
+                      </Box>
+
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 6 }}>
+                          <Typography
+                            variant="caption"
+                            color="textSecondary"
+                            sx={{ display: "block" }}
                           >
-                            <CheckCircleIcon
-                              sx={{
-                                color: "#16a34a",
-                                fontSize: 18,
-                                width: "unset",
-                              }}
-                            />
+                            Рок за плаќање
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: "500" }}
+                          >
+                            {new Date(invoice.dueDate).toLocaleDateString(
+                              "mk-MK",
+                            )}
+                          </Typography>
+                        </Grid>
+                        <Grid size={{ xs: 6 }}>
+                          <Typography
+                            variant="caption"
+                            color="textSecondary"
+                            sx={{ display: "block" }}
+                          >
+                            Вкупна сума
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: "700", color: "#0f172a" }}
+                          >
+                            {invoice.finalPayable || 0} ден.
+                          </Typography>
+                        </Grid>
+                      </Grid>
+
+                      <Divider sx={{ my: 0.5 }} />
+
+                      {/* Статус на испраќање и Акциски копчиња */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        {/* Испратено инфо */}
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                          }}
+                        >
+                          {isSent ? (
+                            <>
+                              <CheckCircleIcon
+                                sx={{ color: "#16a34a", fontSize: 16 }}
+                              />
+                              <Box>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "#16a34a",
+                                    fontWeight: "bold",
+                                    display: "block",
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  Испратено
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  sx={{ color: "#64748b", fontSize: "10px" }}
+                                >
+                                  {new Date(
+                                    invoice.sentAtDate,
+                                  ).toLocaleDateString("mk-MK")}
+                                </Typography>
+                              </Box>
+                            </>
+                          ) : (
+                            <>
+                              <ErrorOutlineIcon
+                                sx={{ color: "#94a3b8", fontSize: 16 }}
+                              />
+                              <Typography
+                                variant="caption"
+                                sx={{ color: "#64748b", fontWeight: "500" }}
+                              >
+                                Не е испратено
+                              </Typography>
+                            </>
+                          )}
+                        </Box>
+
+                        {/* Акции за мобилен */}
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          <IconButton
+                            component={Link}
+                            href={`/invoices/${invoice.id}/preview`}
+                            size="small"
+                            sx={{ color: "#64748b" }}
+                          >
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+
+                          <IconButton
+                            component={Link}
+                            href={`/invoices/${invoice.id}/edit`}
+                            size="small"
+                            sx={{ color: "#0284c7" }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+
+                          <IconButton
+                            onClick={() =>
+                              handleDownloadPdf(invoice.id, invoice.invoiceNo)
+                            }
+                            size="small"
+                            sx={{ color: "#16a34a" }}
+                          >
+                            <DownloadIcon fontSize="small" />
+                          </IconButton>
+
+                          <IconButton
+                            onClick={() =>
+                              handleSendEmail(invoice.id, invoice.invoiceNo)
+                            }
+                            disabled={
+                              sendingEmailId !== null ||
+                              invoice.status === "CANCELED"
+                            }
+                            size="small"
+                            sx={{ color: "#7c3aed" }}
+                          >
+                            {sendingEmailId === invoice.id ? (
+                              <CircularProgress
+                                size={16}
+                                sx={{ color: "#7c3aed" }}
+                              />
+                            ) : (
+                              <EmailIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+          </Box>
+
+          {/* ---------------- SCENARIO B: ДЕСКТОП ПРИКАЗ (ТАБЕЛА) ---------------- */}
+          <TableContainer
+            component={Paper}
+            sx={{
+              display: { xs: "none", md: "block" },
+              boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+              borderRadius: "8px",
+            }}
+          >
+            <Table>
+              <TableHead sx={{ backgroundColor: "#f8fafc" }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: "bold" }}>Број</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Клиент</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>
+                    Рок за плаќање
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Вкупна сума</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }} align="center">
+                    Статус
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }} align="center">
+                    Испратено
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }} align="center">
+                    Акции
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {Array.isArray(invoices) &&
+                  invoices.map((invoice) => {
+                    const isSent = !!invoice.sentAtDate;
+                    return (
+                      <TableRow key={invoice.id} hover>
+                        <TableCell sx={{ fontWeight: "600", color: "#0070f3" }}>
+                          {invoice.invoiceNo}
+                        </TableCell>
+                        <TableCell>
+                          {invoice.client
+                            ? invoice.client.name
+                            : `Клиент ID: ${invoice.clientId}`}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(invoice.dueDate).toLocaleDateString(
+                            "mk-MK",
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "500" }}>
+                          {invoice.finalPayable || 0} ден.
+                        </TableCell>
+
+                        <TableCell align="center">
+                          <InvoiceStatusManager
+                            invoiceId={invoice.id}
+                            currentStatus={invoice.status}
+                            onStatusChangeSuccess={() => fetchInvoices()}
+                            dueDate={invoice.dueDate}
+                          />
+                        </TableCell>
+
+                        <TableCell align="center">
+                          {isSent ? (
                             <Box
                               sx={{
                                 display: "flex",
                                 flexDirection: "column",
-                                justifyContent: "center",
+                                alignItems: "center",
                               }}
                             >
+                              <CheckCircleIcon
+                                sx={{ color: "#16a34a", fontSize: 18 }}
+                              />
                               <Typography
                                 variant="body2"
                                 sx={{
                                   color: "#16a34a",
                                   fontWeight: "bold",
                                   fontSize: "12px",
-                                  lineHeight: 1.1,
+                                  mt: 0.5,
                                 }}
                               >
                                 Испратено
@@ -310,127 +517,125 @@ export default function InvoicesListPage() {
                                 })}
                               </Typography>
                             </Box>
-                          </Box>
-                        ) : (
+                          ) : (
+                            <Box
+                              sx={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                              }}
+                            >
+                              <ErrorOutlineIcon
+                                sx={{ color: "#94a3b8", fontSize: 18 }}
+                              />
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: "#64748b",
+                                  fontSize: "12px",
+                                  fontWeight: "500",
+                                  mt: 0.5,
+                                }}
+                              >
+                                Не е испратено
+                              </Typography>
+                            </Box>
+                          )}
+                        </TableCell>
+
+                        <TableCell align="center">
                           <Box
                             sx={{
                               display: "flex",
-                              flexDirection: "column",
                               justifyContent: "center",
+                              gap: 1,
                             }}
                           >
-                            <ErrorOutlineIcon
-                              sx={{
-                                color: "#94a3b8",
-                                fontSize: 18,
-                                width: "unset",
-                              }}
-                            />
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                color: "#64748b",
-                                fontSize: "12px",
-                                fontWeight: "500",
-                              }}
-                            >
-                              Не е испратено
-                            </Typography>
-                          </Box>
-                        )}
-                      </TableCell>
+                            <Tooltip title="Прегледај PDF">
+                              <IconButton
+                                component={Link}
+                                href={`/invoices/${invoice.id}/preview`}
+                                size="small"
+                                sx={{
+                                  color: "#64748b",
+                                  "&:hover": { color: "#0f172a" },
+                                }}
+                              >
+                                <VisibilityIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
 
-                      {/* НОВАТА КОЛОНА ЗА АКЦИИ */}
-                      <TableCell align="center">
-                        <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "center",
-                            gap: 1,
-                          }}
-                        >
-                          {/* Копче за Преглед */}
-                          <Tooltip title="Прегледај PDF">
-                            <IconButton
-                              component={Link}
-                              href={`/invoices/${invoice.id}/preview`} // Прилагоди ја патеката за твојот Preview екран
-                              size="small"
-                              sx={{
-                                color: "#64748b",
-                                "&:hover": { color: "#0f172a" },
-                              }}
-                            >
-                              <VisibilityIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                            <Tooltip title="Уреди фактура">
+                              <IconButton
+                                component={Link}
+                                href={`/invoices/${invoice.id}/edit`}
+                                size="small"
+                                sx={{
+                                  color: "#0284c7",
+                                  "&:hover": { color: "#0369a1" },
+                                }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
 
-                          {/* Копче за Уреди */}
-                          <Tooltip title="Уреди фактура">
-                            <IconButton
-                              component={Link}
-                              href={`/invoices/${invoice.id}/edit`} // Рута за Edit формата
-                              size="small"
-                              sx={{
-                                color: "#0284c7",
-                                "&:hover": { color: "#0369a1" },
-                              }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-
-                          {/* Копче за Директно Преземање */}
-                          <Tooltip title="Преземи PDF">
-                            <IconButton
-                              onClick={() =>
-                                handleDownloadPdf(invoice.id, invoice.invoiceNo)
-                              }
-                              size="small"
-                              sx={{
-                                color: "#16a34a",
-                                "&:hover": { color: "#15803d" },
-                              }}
-                            >
-                              <DownloadIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Испрати на е-маил">
-                            <span>
-                              {" "}
-                              {/* Спан е тука за да работи Tooltip-от кога копчето е disabled */}
+                            <Tooltip title="Преземи PDF">
                               <IconButton
                                 onClick={() =>
-                                  handleSendEmail(invoice.id, invoice.invoiceNo)
-                                }
-                                disabled={
-                                  sendingEmailId !== null ||
-                                  invoice.status === "CANCELED"
+                                  handleDownloadPdf(
+                                    invoice.id,
+                                    invoice.invoiceNo,
+                                  )
                                 }
                                 size="small"
                                 sx={{
-                                  color: "#7c3aed", // Виолетова боја за е-маил акција
-                                  "&:hover": { color: "#6d28d9" },
+                                  color: "#16a34a",
+                                  "&:hover": { color: "#15803d" },
                                 }}
                               >
-                                {sendingEmailId === invoice.id ? (
-                                  <CircularProgress
-                                    size={18}
-                                    sx={{ color: "#7c3aed" }}
-                                  />
-                                ) : (
-                                  <EmailIcon fontSize="small" />
-                                )}
+                                <DownloadIcon fontSize="small" />
                               </IconButton>
-                            </span>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                            </Tooltip>
+
+                            <Tooltip title="Испрати на е-маил">
+                              <span>
+                                <IconButton
+                                  onClick={() =>
+                                    handleSendEmail(
+                                      invoice.id,
+                                      invoice.invoiceNo,
+                                    )
+                                  }
+                                  disabled={
+                                    sendingEmailId !== null ||
+                                    invoice.status === "CANCELED"
+                                  }
+                                  size="small"
+                                  sx={{
+                                    color: "#7c3aed",
+                                    "&:hover": { color: "#6d28d9" },
+                                  }}
+                                >
+                                  {sendingEmailId === invoice.id ? (
+                                    <CircularProgress
+                                      size={18}
+                                      sx={{ color: "#7c3aed" }}
+                                    />
+                                  ) : (
+                                    <EmailIcon fontSize="small" />
+                                  )}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
     </Box>
   );

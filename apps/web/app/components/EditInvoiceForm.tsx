@@ -73,16 +73,27 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
         }
         setNote(data.note || "");
 
-        const mappedItems = (data.items || []).map(
-          (item: InvoiceItemState) => ({
-            description: item.description || "",
-            quantity: Number(item.quantity) || 1,
-            unitOfMeasure: item.unitOfMeasure || "ПАР",
-            price: Number(item.price) || 0,
-            discountPercent: Number(item.discountPercent) || 0,
-            vatRate: Number(item.vatRate) || 18,
-          }),
-        );
+        const mappedItems = (data.items || []).map((item: any) => ({
+          description: item.description || "",
+          quantity:
+            item.quantity !== undefined && item.quantity !== null
+              ? Number(item.quantity)
+              : 1,
+          unitOfMeasure: item.unitOfMeasure || "ПАР",
+          price:
+            item.price !== undefined && item.price !== null
+              ? Number(item.price)
+              : 0,
+          discountPercent:
+            item.discountPercent !== undefined && item.discountPercent !== null
+              ? Number(item.discountPercent)
+              : 0,
+          // Средено: Ако е 0 си останува 0, ако е null/undefined тогаш паѓа на 18%
+          vatRate:
+            item.vatRate !== undefined && item.vatRate !== null
+              ? Number(item.vatRate)
+              : 18,
+        }));
 
         setItems(mappedItems);
       } catch (err) {
@@ -154,12 +165,21 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
   ) => {
     setItems((prevItems) => {
       const newItems = [...prevItems];
+      let finalValue: string | number = 0;
+
+      if (field === "description" || field === "unitOfMeasure") {
+        finalValue = String(value);
+      } else {
+        // Обезбедуваме дека вредностите како 0 нема да се претворат во NaN туку ќе си останат 0
+        finalValue =
+          value === "" || value === null || value === undefined
+            ? 0
+            : Number(value);
+      }
+
       newItems[index] = {
         ...newItems[index],
-        [field]:
-          field === "description" || field === "unitOfMeasure"
-            ? String(value)
-            : Number(value) || 0,
+        [field]: finalValue,
       } as InvoiceItemState;
       return newItems;
     });
@@ -456,7 +476,6 @@ export const EditInvoiceForm: React.FC<EditInvoiceFormProps> = ({
       </Box>
 
       {/* ---------------- SCENARIO Б: ДЕСКТОП ПРИКАЗ ---------------- */}
-      {/* Го зголемивме maxWidth на контејнерот на 1200px за да ги собере сите пресметки фино */}
       <TableContainer
         component={Paper}
         sx={{

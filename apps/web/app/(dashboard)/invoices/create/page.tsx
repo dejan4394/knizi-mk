@@ -30,6 +30,8 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
+import { useRouter } from "next/navigation";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 interface InvoiceItemInput {
   description: string;
@@ -223,12 +225,21 @@ export default function CreateInvoicePage() {
     }
   };
 
+  const router = useRouter();
+
   return (
     <Box
       component="form"
       onSubmit={handleSubmit}
       sx={{ maxWidth: "1200px", margin: "0 auto", px: { xs: 2, sm: 0 } }}
     >
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => router.push("/invoices")}
+        sx={{ mb: 1, textTransform: "none" }}
+      >
+        Назад кон фактури
+      </Button>
       <Typography
         variant="h4"
         sx={{
@@ -498,10 +509,8 @@ export default function CreateInvoicePage() {
         component={Paper}
         sx={{
           display: { xs: "none", md: "block" },
-          mb: 3,
           boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
-          borderRadius: "12px",
-          overflow: "hidden",
+          borderRadius: "8px",
         }}
       >
         <Table>

@@ -23,10 +23,16 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
+  Card,
+  CardContent,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
-import EditIcon from "@mui/icons-material/Edit"; // ДОДАДЕНО: Икона за измена
+import EditIcon from "@mui/icons-material/Edit";
+import BusinessIcon from "@mui/icons-material/Business";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import EmailIcon from "@mui/icons-material/Email";
 
 interface Client {
   id: number;
@@ -45,7 +51,7 @@ export default function ClientsPage() {
   // Држава за модалот (Дијалогот)
   const [openModal, setOpenModal] = useState<boolean>(false);
 
-  // ДОДАДЕНО: Следење дали модалот е во режим на уредување (чува објект или null)
+  // Следење дали модалот е во режим на уредување
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   // Форма држава за клиент
@@ -66,7 +72,7 @@ export default function ClientsPage() {
       setError(null);
     } catch (err: any) {
       console.error("Грешка при влечење клиенти:", err);
-      setError("Неуспешно vчитување на клиентите од базата.");
+      setError("Неуспешно вчитавање на клиентите од базата.");
     } finally {
       setLoading(false);
     }
@@ -76,7 +82,7 @@ export default function ClientsPage() {
     fetchClients();
   }, []);
 
-  // ДОДАДЕНО: Функција за отворање на модалот во режим на "Нов Клиент"
+  // Функција за отворање на модалот во режим на "Нов Клиент"
   const handleOpenCreateModal = () => {
     setEditingClient(null);
     setFormData({
@@ -89,7 +95,7 @@ export default function ClientsPage() {
     setOpenModal(true);
   };
 
-  // ДОДАДЕНО: Функција за отворање на модалот во режим на "Измена (Edit)"
+  // Функција за отворање на модалот во режим на "Измена (Edit)"
   const handleOpenEditModal = (client: Client) => {
     setEditingClient(client);
     setFormData({
@@ -107,17 +113,15 @@ export default function ClientsPage() {
     e.preventDefault();
     try {
       if (editingClient) {
-        // РЕЖИМ: АЖУРИРАЊЕ (PUT повик со ID на клиентот)
         await api.put(`/clients/${editingClient.id}`, formData);
         alert("Податоците за клиентот се успешно ажурирани!");
       } else {
-        // РЕЖИМ: КРЕИРАЊЕ (POST повик за нов клиент)
         await api.post("/clients", formData);
         alert("Клиентот е успешно зачуван!");
       }
 
       setOpenModal(false);
-      fetchClients(); // Освежи ја табелата
+      fetchClients(); // Освежи ја листата
     } catch (err: any) {
       console.error("Грешка при процесирање на клиентот:", err);
       alert(
@@ -160,7 +164,7 @@ export default function ClientsPage() {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={handleOpenCreateModal} // ИЗМЕНЕТО: Повикува ресет-форма
+          onClick={handleOpenCreateModal}
           sx={{
             backgroundColor: "#0070f3",
             textTransform: "none",
@@ -174,7 +178,7 @@ export default function ClientsPage() {
         </Button>
       </Box>
 
-      {/* Листа / Табела */}
+      {/* Листа / Табела со Лоадинг состојби */}
       {loading ? (
         <Box
           sx={{
@@ -214,70 +218,241 @@ export default function ClientsPage() {
           </Button>
         </Paper>
       ) : (
-        <TableContainer
-          component={Paper}
-          sx={{
-            boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
-            borderRadius: "8px",
-          }}
-        >
-          <Table>
-            <TableHead sx={{ backgroundColor: "#f8fafc" }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
-                  Назив на компанија
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
-                  ЕДБ / Даночен број
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
-                  Адреса
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
-                  Жиро Сметка
-                </TableCell>
-                <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
-                  Е-пошта
-                </TableCell>
-                {/* ДОДАДЕНО: Колона за Акции */}
-                <TableCell
-                  align="right"
-                  sx={{ fontWeight: "bold", color: "#334155", pr: 3 }}
-                >
-                  Акции
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+        <>
+          {/* ============================================================= */}
+          {/* 1. ПРИКАЗ НА МОБИЛЕН (КАРТИЧКИ) - Се прикажува само на xs и sm */}
+          {/* ============================================================= */}
+          <Box sx={{ display: { xs: "block", md: "none" } }}>
+            <Grid container spacing={2}>
               {clients.map((client) => (
-                <TableRow key={client.id} hover>
-                  <TableCell sx={{ fontWeight: "600", color: "#0f172a" }}>
-                    {client.name}
-                  </TableCell>
-                  <TableCell>{client.edb}</TableCell>
-                  <TableCell>{client.address}</TableCell>
-                  <TableCell>{client.accountNo || "/"}</TableCell>
-                  <TableCell>{client.email || "/"}</TableCell>
-                  {/* ДОДАДЕНО: Копче за Edit на секој ред */}
-                  <TableCell align="right" sx={{ pr: 2 }}>
-                    <Tooltip title="Уреди податоци" arrow>
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleOpenEditModal(client)}
+                <Grid size={{ xs: 12 }} key={client.id}>
+                  <Card
+                    sx={{
+                      borderRadius: "10px",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+                      {/* Назив и Едит икона */}
+                      <Box
                         sx={{
-                          color: "#0070f3",
-                          "&:hover": { backgroundColor: "#f0f7ff" },
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          mb: 2,
                         }}
                       >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            gap: 1,
+                            alignItems: "flex-start",
+                            maxWidth: "80%",
+                          }}
+                        >
+                          <BusinessIcon
+                            sx={{ color: "#0070f3", mt: 0.3, flexShrink: 0 }}
+                          />
+                          <Typography
+                            variant="subtitle1"
+                            sx={{
+                              fontWeight: "700",
+                              color: "#0f172a",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            {client.name}
+                          </Typography>
+                        </Box>
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleOpenEditModal(client)}
+                          sx={{
+                            color: "#0070f3",
+                            backgroundColor: "#f0f7ff",
+                            p: 1,
+                            borderRadius: "8px",
+                            "&:hover": { backgroundColor: "#e0f0ff" },
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+
+                      {/* Информации на картичката */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 1.2,
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "#334155",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{
+                              fontWeight: "600",
+                              color: "#64748b",
+                              width: "50px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            ЕДБ:
+                          </Box>
+                          {client.edb}
+                        </Typography>
+
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "#334155",
+                            display: "flex",
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <LocationOnIcon
+                            sx={{
+                              fontSize: 18,
+                              color: "#64748b",
+                              mr: 1,
+                              mt: 0.2,
+                              flexShrink: 0,
+                            }}
+                          />
+                          {client.address}
+                        </Typography>
+
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "#334155",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <AccountBalanceWalletIcon
+                            sx={{
+                              fontSize: 18,
+                              color: "#64748b",
+                              mr: 1,
+                              flexShrink: 0,
+                            }}
+                          />
+                          {client.accountNo || "/"}
+                        </Typography>
+
+                        {client.email && (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "#334155",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            <EmailIcon
+                              sx={{
+                                fontSize: 18,
+                                color: "#64748b",
+                                mr: 1,
+                                flexShrink: 0,
+                              }}
+                            />
+                            <Box
+                              component="span"
+                              sx={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {client.email}
+                            </Box>
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+
+          {/* ============================================================= */}
+          {/* 2. ПРИКАЗ НА ДЕСКТОП (ТАБЕЛА) - Се прикажува од md нагоре */}
+          {/* ============================================================= */}
+          <TableContainer
+            component={Paper}
+            sx={{
+              display: { xs: "none", md: "block" },
+              boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+              borderRadius: "8px",
+            }}
+          >
+            <Table>
+              <TableHead sx={{ backgroundColor: "#f8fafc" }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
+                    Назив на компанија
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
+                    ЕДБ / Даночен број
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
+                    Адреса
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
+                    Жиро Сметка
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", color: "#334155" }}>
+                    Е-пошта
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    sx={{ fontWeight: "bold", color: "#334155", pr: 3 }}
+                  >
+                    Акции
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {clients.map((client) => (
+                  <TableRow key={client.id} hover>
+                    <TableCell sx={{ fontWeight: "600", color: "#0f172a" }}>
+                      {client.name}
+                    </TableCell>
+                    <TableCell>{client.edb}</TableCell>
+                    <TableCell>{client.address}</TableCell>
+                    <TableCell>{client.accountNo || "/"}</TableCell>
+                    <TableCell>{client.email || "/"}</TableCell>
+                    <TableCell align="right" sx={{ pr: 2 }}>
+                      <Tooltip title="Уреди податоци" arrow>
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleOpenEditModal(client)}
+                          sx={{
+                            color: "#0070f3",
+                            "&:hover": { backgroundColor: "#f0f7ff" },
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
 
       {/* МУИ Дијалог (Модал) - Заеднички за Креирање и Измена */}
@@ -288,7 +463,6 @@ export default function ClientsPage() {
         maxWidth="sm"
       >
         <Box component="form" onSubmit={handleSubmitClient}>
-          {/* ДИНАМИЧЕН НАСЛОВ */}
           <DialogTitle sx={{ fontWeight: "bold", pb: 1, pt: 3 }}>
             {editingClient
               ? "Ажурирај Податоци на Комитент"
@@ -360,13 +534,12 @@ export default function ClientsPage() {
             >
               Откажи
             </Button>
-            {/* ДИНАМИЧЕН ТЕКСТ НА КОПЧЕТО ЗА ЗАЧУВУВАЊЕ */}
             <Button
               type="submit"
               variant="contained"
               startIcon={<SaveIcon />}
               sx={{
-                backgroundColor: editingClient ? "#7c3aed" : "#0070f3", // Виолетово за едит, Сино за нов корисник
+                backgroundColor: editingClient ? "#7c3aed" : "#0070f3",
                 textTransform: "none",
                 fontWeight: "bold",
                 borderRadius: "6px",
@@ -376,7 +549,7 @@ export default function ClientsPage() {
                 },
               }}
             >
-              {editingClient ? "Зачувај Измени" : "Зачувај Клиент"}
+              {editingClient ? "Зачувај Измени" : "Зачувај  Клиент"}
             </Button>
           </DialogActions>
         </Box>

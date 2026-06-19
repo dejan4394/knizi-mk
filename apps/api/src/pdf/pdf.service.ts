@@ -8,6 +8,10 @@ import {
   IInvoiceDataForTemplate,
   IItemDataForTemplate,
 } from 'src/invoices/types';
+import {
+  DocumentType,
+  InvoiceStatus,
+} from 'src/invoices/entities/invoice.entity';
 
 @Injectable()
 export class PdfService {
@@ -88,7 +92,6 @@ export class PdfService {
 
     data.items.forEach((item: IItemDataForTemplate) => {
       const vatRate = parseInt(item.vatRate) || 0;
-
       const base = Number(item.itemSubtotal || 0);
       const vat = base * (vatRate / 100);
       const total = base + vat;
@@ -108,8 +111,14 @@ export class PdfService {
       total: group.total.toFixed(2),
     }));
 
+    const isProforma =
+      data.documentType === DocumentType.PROFORMA ||
+      data.status === InvoiceStatus.PROFORMA_PENDING;
+    const documentTitle = isProforma ? 'Профактура' : 'Фактура';
+
     return {
       ...data,
+      documentTitle,
       vatRecapitulation,
     };
   }

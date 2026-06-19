@@ -25,11 +25,13 @@ import {
   CircularProgress,
   FormControl,
   InputLabel,
+  Tooltip,
 } from "@mui/material";
 
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
 import { useRouter } from "next/navigation";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
@@ -43,7 +45,17 @@ interface InvoiceItemInput {
 }
 
 export default function CreateInvoicePage() {
-  const [invoiceNo, setInvoiceNo] = useState("");
+  const router = useRouter();
+
+  // Состојба за тип на документ (Фактура или Профактура)
+  const [documentType, setDocumentType] = useState<"INVOICE" | "PROFORMA">(
+    "INVOICE",
+  );
+
+  // ИЗМЕНЕТО: Почетната вредност е 0 бидејќи полето сега прима само броеви
+  const [invoiceNo, setInvoiceNo] = useState<number>(0);
+  const [loadingNumber, setLoadingNumber] = useState(false);
+
   const [clientId, setClientId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
@@ -70,6 +82,25 @@ export default function CreateInvoicePage() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [loadingClients, setLoadingClients] = useState<boolean>(true);
+
+  // Функција за влечење на следниот автоматски број од бекендот
+  const fetchNextNumber = async (type: "INVOICE" | "PROFORMA") => {
+    setLoadingNumber(true);
+    try {
+      const response = await api.get(`/invoices/next-number/${type}`);
+      setInvoiceNo(Number(response.data.nextInvoiceNumber) || 0);
+    } catch (err) {
+      console.error("Грешка при влечење следен број:", err);
+      setInvoiceNo(0);
+    } finally {
+      setLoadingNumber(false);
+    }
+  };
+
+  // Повлечи нов број секогаш кога корисникот ќе го смени типот на документот
+  useEffect(() => {
+    fetchNextNumber(documentType);
+  }, [documentType]);
 
   // Повлекување на клиентите од базата
   useEffect(() => {
@@ -163,7 +194,6 @@ export default function CreateInvoicePage() {
     });
   }, [items]);
 
-  // 1. Пресметка на чиста основа по ставка (цена * количина - попуст)
   const getItemSubtotal = (item: InvoiceItemInput) => {
     const q = Number(item.quantity) || 0;
     const p = Number(item.price) || 0;
@@ -171,24 +201,30 @@ export default function CreateInvoicePage() {
     return p * (1 - d / 100) * q;
   };
 
-  // 2. Пресметка на износ на ДДВ за ставката
   const getItemVatAmount = (item: InvoiceItemInput) => {
     const subtotal = getItemSubtotal(item);
     const v = Number(item.vatRate) || 0;
     return subtotal * (v / 100);
   };
 
-  // 3. Пресметка на вкупна вредност со вклучено ДДВ за ставката
   const getItemTotalWithVat = (item: InvoiceItemInput) => {
     return getItemSubtotal(item) + getItemVatAmount(item);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ИЗМЕНЕТО: Валидација за бројот бидејќи сега е чист Number
+    if (!invoiceNo || invoiceNo <= 0) {
+      alert("Ве молиме внесете валиден број на документ пред да зачувате.");
+      return;
+    }
+
     setSubmitting(true);
 
     const payload = {
-      invoiceNo,
+      invoiceNo: invoiceNo,
+      documentType,
       clientId: Number(clientId) || 1,
       dueDate,
       note,
@@ -199,21 +235,10 @@ export default function CreateInvoicePage() {
       const response = await api.post("/invoices", payload);
 
       if (response.status === 201 || response.status === 200) {
-        alert("Фактурата е успешно зачувана во базата!");
-        setInvoiceNo("");
-        setClientId("");
-        setDueDate("");
-        setNote("");
-        setItems([
-          {
-            description: "",
-            quantity: 1,
-            unitOfMeasure: "ПАР",
-            price: 0,
-            discountPercent: 0,
-            vatRate: 18,
-          },
-        ]);
+        alert(
+          `${documentType === "INVOICE" ? "Фактурата" : "Профактурата"} е успешно зачувана во базата!`,
+        );
+        router.push("/invoices");
       }
     } catch (error: any) {
       console.error("API Error:", error);
@@ -224,8 +249,6 @@ export default function CreateInvoicePage() {
       setSubmitting(false);
     }
   };
-
-  const router = useRouter();
 
   return (
     <Box
@@ -250,7 +273,7 @@ export default function CreateInvoicePage() {
           textAlign: { xs: "center", sm: "left" },
         }}
       >
-        Креирај Нова Фактура
+        Креирај Нов Документ
       </Typography>
 
       {/* Мета податоци */}
@@ -263,17 +286,75 @@ export default function CreateInvoicePage() {
       >
         <CardContent sx={{ p: 3 }}>
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            {/* Избор на тип на документ */}
+            <Grid size={{ xs: 12, sm: 3 }}>
+              <FormControl fullWidth variant="outlined">
+                <InputLabel id="document-type-label">
+                  Тип на документ
+                </InputLabel>
+                <Select
+                  labelId="document-type-label"
+                  label="Тип на документ"
+                  value={documentType}
+                  onChange={(e) => setDocumentType(e.target.value as any)}
+                >
+                  <MenuItem value="INVOICE">Финална Фактура</MenuItem>
+                  <MenuItem value="PROFORMA">Профактура</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* ИЗМЕНЕТО: Текст поле со тип "number" и активни стрелки (spinners) */}
+            <Grid size={{ xs: 12, sm: 3 }}>
               <TextField
-                label="Број на фактура"
+                label={
+                  documentType === "INVOICE"
+                    ? "Број на фактура"
+                    : "Број на профактура"
+                }
+                type="number"
                 variant="outlined"
                 fullWidth
-                value={invoiceNo}
-                onChange={(e) => setInvoiceNo(e.target.value)}
-                required
+                value={loadingNumber ? "" : invoiceNo}
+                onChange={(e) => setInvoiceNo(Number(e.target.value))}
+                placeholder={loadingNumber ? "Се вчитува..." : ""}
+                slotProps={{
+                  htmlInput: {
+                    min: 1,
+                    step: 1,
+                  },
+                  // Ставање на иконата за ресетирање директно десно во input-от
+                  input: {
+                    endAdornment: (
+                      <Tooltip title="Ресетирај на пресметан број">
+                        <span>
+                          {" "}
+                          {/* span спречува грешки ако IconButton е disabled */}
+                          <IconButton
+                            onClick={() => fetchNextNumber(documentType)}
+                            disabled={loadingNumber}
+                            color="primary"
+                            size="small"
+                            edge="end"
+                          >
+                            <AutorenewIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    ),
+                  },
+                }}
+                sx={{
+                  "& .MuiInputBase-root": {
+                    fontWeight: "bold",
+                    color: "#0f172a",
+                    pr: 1, // Малку простор од десно за иконата
+                  },
+                }}
+                helperText="Може да менувате рачно со стрелките"
               />
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            <Grid size={{ xs: 12, sm: 3 }}>
               <FormControl fullWidth required variant="outlined">
                 <InputLabel id="client-select-label">Избери Клиент</InputLabel>
                 <Select
@@ -301,7 +382,8 @@ export default function CreateInvoicePage() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
+
+            <Grid size={{ xs: 12, sm: 3 }}>
               <TextField
                 label="Рок на плаќање"
                 type="date"
@@ -319,11 +401,12 @@ export default function CreateInvoicePage() {
         </CardContent>
       </Card>
 
+      {/* Ставки на фактура */}
       <Typography
         variant="h6"
         sx={{ fontWeight: "bold", mb: 2, color: "#334155" }}
       >
-        Ставки на фактура
+        Ставки на документ
       </Typography>
 
       {/* ---------------- SCENARIO A: МОБИЛЕН ПРИКАЗ ---------------- */}
@@ -456,7 +539,6 @@ export default function CreateInvoicePage() {
 
               <Divider sx={{ my: 0.5 }} />
 
-              {/* Финансиски детали на мобилен по ставка */}
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                   <Typography variant="body2" color="textSecondary">
@@ -511,6 +593,7 @@ export default function CreateInvoicePage() {
           display: { xs: "none", md: "block" },
           boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
           borderRadius: "8px",
+          mb: 2,
         }}
       >
         <Table>
@@ -534,8 +617,6 @@ export default function CreateInvoicePage() {
               <TableCell sx={{ fontWeight: "bold", width: "95px" }}>
                 ДДВ %
               </TableCell>
-
-              {/* Новите пресметковни колони за ДДВ и Крајно вкупно по ставка */}
               <TableCell
                 sx={{ fontWeight: "bold", width: "110px" }}
                 align="right"
@@ -548,7 +629,6 @@ export default function CreateInvoicePage() {
               >
                 Вкупно со ДДВ
               </TableCell>
-
               <TableCell
                 sx={{ fontWeight: "bold", width: "60px" }}
                 align="center"
@@ -634,8 +714,6 @@ export default function CreateInvoicePage() {
                     <MenuItem value={0}>0%</MenuItem>
                   </Select>
                 </TableCell>
-
-                {/* Износ на ДДВ за тековниот ред */}
                 <TableCell sx={{ p: 0.8 }} align="right">
                   <Typography
                     sx={{
@@ -647,8 +725,6 @@ export default function CreateInvoicePage() {
                     {getItemVatAmount(item).toFixed(2)}
                   </Typography>
                 </TableCell>
-
-                {/* Вкупно со ДДВ за тековниот ред */}
                 <TableCell sx={{ p: 0.8, pr: 1.5 }} align="right">
                   <Typography
                     sx={{
@@ -660,7 +736,6 @@ export default function CreateInvoicePage() {
                     {getItemTotalWithVat(item).toFixed(2)}
                   </Typography>
                 </TableCell>
-
                 <TableCell sx={{ p: 0.8 }} align="center">
                   <IconButton
                     color="error"
@@ -676,7 +751,6 @@ export default function CreateInvoicePage() {
         </Table>
       </TableContainer>
 
-      {/* Копче за додавање ставка */}
       <Button
         variant="outlined"
         startIcon={<AddIcon />}
@@ -777,7 +851,7 @@ export default function CreateInvoicePage() {
             <SaveIcon />
           )
         }
-        disabled={submitting}
+        disabled={submitting || loadingNumber}
         sx={{
           backgroundColor: "#0070f3",
           padding: "12px 32px",
@@ -788,7 +862,11 @@ export default function CreateInvoicePage() {
           "&:hover": { backgroundColor: "#0051bb" },
         }}
       >
-        {submitting ? "Се зачувува..." : "Зачувај ја фактурата"}
+        {submitting
+          ? "Се зачувува..."
+          : documentType === "INVOICE"
+            ? "Зачувај ја фактурата"
+            : "Зачувај ја профактурата"}
       </Button>
     </Box>
   );

@@ -1,7 +1,7 @@
-import { Base } from 'src/invoices/entities/base.entity';
+import { Base } from '../../invoices/entities/base.entity';
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { UserRole } from '../enums/user.enum';
-import { Company } from 'src/companies/entities/company.entity';
+import { Company } from '../../companies/entities/company.entity';
 
 @Entity('users')
 export class User extends Base {

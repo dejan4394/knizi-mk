@@ -1,4 +1,8 @@
+import { DocumentType, InvoiceStatus } from '../entities/invoice.entity';
+
 export interface IInvoiceDataForTemplate {
+  status: InvoiceStatus;
+  documentType: DocumentType;
   invoiceNumber: string;
   companyName: string;
   companyEdb: string;

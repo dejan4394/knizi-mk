@@ -1,3 +1,5 @@
+import { DocumentType } from '../entities/invoice.entity';
+
 export class CreateInvoiceItemDto {
   description!: string;
   quantity!: number;
@@ -8,10 +10,11 @@ export class CreateInvoiceItemDto {
 }
 
 export class CreateInvoiceDto {
-  invoiceNo!: string;
+  invoiceNo!: number;
   companyId!: number;
   clientId!: number;
   dueDate!: string | Date;
   note?: string;
   items!: CreateInvoiceItemDto[]; // Стриктна низа од ставки, наместо any
+  documentType?: DocumentType;
 }

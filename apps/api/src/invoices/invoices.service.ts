@@ -4,8 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Invoice, InvoiceStatus } from './entities/invoice.entity';
+import { DataSource, EntityManager, Repository, Not } from 'typeorm';
+import {
+  DocumentType,
+  Invoice,
+  InvoiceStatus,
+} from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { Client } from '../clients/entities/client.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -22,8 +26,9 @@ export class InvoicesService {
     @InjectRepository(InvoiceItem)
     private readonly itemRepository: Repository<InvoiceItem>,
     @InjectRepository(Client)
-    private readonly clientRepository: Repository<Client>, // ИНЈЕКТИРАЈ ГО РЕПОЗИТОРИУМОТ ЗА КЛИЕНТИ
+    private readonly clientRepository: Repository<Client>,
     private readonly pdfService: PdfService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -31,6 +36,26 @@ export class InvoicesService {
     loggedInCompanyId: number,
   ): Promise<Invoice> {
     const { items, invoiceNo, clientId, dueDate, note } = createInvoiceDto;
+
+    // Земи ја годината од внесениот датум или тековната година како дефолт
+    const currentYear = dueDate
+      ? new Date(dueDate).getFullYear()
+      : new Date().getFullYear();
+    const docType = createInvoiceDto.documentType || DocumentType.INVOICE;
+
+    // Валидација: Проверка за дупликат број во таа година за фирмата
+    const isDuplicate = await this.checkInvoiceNumberExists(
+      loggedInCompanyId,
+      Number(invoiceNo),
+      currentYear,
+      docType,
+    );
+
+    if (isDuplicate) {
+      throw new BadRequestException(
+        `Веќе постои документ од тип ${docType} со број ${invoiceNo} за ${currentYear} година.`,
+      );
+    }
 
     const clientExists = await this.clientRepository.findOne({
       where: { id: Number(clientId) },
@@ -74,7 +99,9 @@ export class InvoicesService {
     const roundingAmount = finalPayable - exactTotalWithVat;
 
     const invoice = new Invoice();
-    invoice.invoiceNo = invoiceNo;
+    invoice.invoiceNo = Number(invoiceNo);
+    invoice.year = currentYear;
+    invoice.documentType = docType;
     invoice.companyId = loggedInCompanyId;
     invoice.clientId = Number(clientId);
     invoice.dueDate = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
@@ -137,12 +164,36 @@ export class InvoicesService {
       throw new NotFoundException(`Фактурата со ID ${id} не е пронајдена.`);
     }
 
+    // Подготовка на вредности за проверка на уникатност при едит
+    const checkNo = invoiceNo ? Number(invoiceNo) : invoice.invoiceNo;
+    const checkYear = dueDate ? new Date(dueDate).getFullYear() : invoice.year;
+    const checkType = updateInvoiceDto.documentType || invoice.documentType;
+
+    // Проверка дали новиот број (или година) се веќе зафатени од друг документ
+    const isDuplicate = await this.checkInvoiceNumberExists(
+      loggedInCompanyId,
+      checkNo,
+      checkYear,
+      checkType,
+      id,
+    );
+
+    if (isDuplicate) {
+      throw new BadRequestException(
+        `Бројот ${checkNo} за ${checkYear} година е веќе зафатен од друг документ.`,
+      );
+    }
+
     // 2. Ажурирај ги основните полиња доколку се пратени од фронтендот
-    if (invoiceNo) invoice.invoiceNo = invoiceNo;
-    if (note !== undefined) invoice.note = note; // овозможува и бришење на ноте (празен стринг)
-    if (dueDate)
+    if (invoiceNo) invoice.invoiceNo = Number(invoiceNo);
+    if (note !== undefined) invoice.note = note;
+    if (dueDate) {
       invoice.dueDate =
         typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
+      invoice.year = new Date(dueDate).getFullYear();
+    }
+    if (updateInvoiceDto.documentType)
+      invoice.documentType = updateInvoiceDto.documentType;
 
     if (clientId) {
       const clientExists = await this.clientRepository.findOne({
@@ -184,8 +235,6 @@ export class InvoicesService {
         invoiceItem.discountPercent = discountPercent;
         invoiceItem.vatRate = vatRate;
 
-        console.log(invoiceItem, 'fsfds');
-
         return invoiceItem;
       });
 
@@ -205,7 +254,6 @@ export class InvoicesService {
   }
 
   async updateStatus(id: number, nextStatus: InvoiceStatus): Promise<Invoice> {
-    // 1. Најди ја фактурата во базата
     const invoice = await this.invoiceRepository.findOne({ where: { id } });
 
     if (!invoice) {
@@ -219,22 +267,17 @@ export class InvoicesService {
     }
 
     invoice.status = nextStatus;
-
-    // Опционално: Овде во иднина можеш да додадеш логика, на пример:
-    // if (nextStatus === InvoiceStatus.PAID) { ... генерирај сметководствен налог за уплата ... }
-
     return await this.invoiceRepository.save(invoice);
   }
 
   async sendInvoiceToEmail(
     id: number,
   ): Promise<{ success: boolean; message: string }> {
-    // 1. Извлекување на фактурата со leftJoin за клиент и компанија
     const invoice = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.client', 'client')
       .leftJoinAndSelect('invoice.company', 'company')
-      .addSelect('company.smtpPass') // Го вклучуваме заштитеното поле со лозинка/клучеви
+      .addSelect('company.smtpPass')
       .leftJoinAndSelect('invoice.items', 'items')
       .where('invoice.id = :id', { id })
       .getOne();
@@ -252,7 +295,6 @@ export class InvoicesService {
       );
     }
 
-    // 2. ПРВО го генерираме PDF-от во меморија за да биде спремен за двата улови
     const formattedTemplateData = this.mapInvoiceToTemplateData(invoice);
     const pdfBuffer = await this.pdfService.generateInvoicePdf(
       formattedTemplateData,
@@ -261,9 +303,6 @@ export class InvoicesService {
 
     const hostLower = company.smtpHost.toLowerCase();
 
-    // -------------------------------------------------------------------------
-    // УСЛОВ 1: ПРАЌАЊЕ ПРЕКУ MAILJET REST API (Ако хостот содржи mailjet)
-    // -------------------------------------------------------------------------
     if (hostLower.includes('mailjet')) {
       try {
         const [apiKey, secretKey] = company.smtpPass.split(':');
@@ -327,7 +366,6 @@ export class InvoicesService {
           throw new Error(`Mailjet одбивање (${response.status}): ${errText}`);
         }
 
-        // Ажурирање на датумот при успешност
         invoice.sentAtDate = new Date();
         await this.invoiceRepository.save(invoice);
 
@@ -342,12 +380,7 @@ export class InvoicesService {
           `Грешка при испраќање преку Mailjet: ${err.message}`,
         );
       }
-    }
-
-    // -------------------------------------------------------------------------
-    // УСЛОВ 2: КЛАСИЧЕН SMTP ТРАНСПОРТ (За сите останати провајдери - Yahoo, Gmail, итн.)
-    // -------------------------------------------------------------------------
-    else {
+    } else {
       const isSecurePort = company.smtpPort === 465;
 
       const transportOptions: SMTPTransport.Options = {
@@ -356,13 +389,13 @@ export class InvoicesService {
         secure: isSecurePort,
         auth: {
           user: company.smtpUser,
-          pass: company.smtpPass, // Овде се очекува класична или апликациска лозинка
+          pass: company.smtpPass,
         },
         connectionTimeout: 15000,
         greetingTimeout: 10000,
         socketTimeout: 15000,
         tls: {
-          rejectUnauthorized: false, // Го спречува паѓањето на Render поради SSL
+          rejectUnauthorized: false,
         },
       };
 
@@ -385,13 +418,12 @@ export class InvoicesService {
           attachments: [
             {
               filename: `Faktura-${invoice.invoiceNo}.pdf`,
-              content: pdfBuffer, // Nodemailer прифаќа директно сиров Buffer
+              content: pdfBuffer,
               contentType: 'application/pdf',
             },
           ],
         });
 
-        // Ажурирање на датумот при успешност
         invoice.sentAtDate = new Date();
         await this.invoiceRepository.save(invoice);
 
@@ -411,7 +443,10 @@ export class InvoicesService {
 
   public mapInvoiceToTemplateData(dbInvoice: any): any {
     return {
+      documentType: dbInvoice.documentType,
+      status: dbInvoice.status,
       invoiceNumber: dbInvoice.invoiceNo,
+      year: dbInvoice.year,
       companyName: dbInvoice.company?.name || 'Моја Компанија',
       companyEdb: dbInvoice.company?.edb || '',
       companyAddress: dbInvoice.company?.address || '',
@@ -456,5 +491,132 @@ export class InvoicesService {
       finalPayable: Number(dbInvoice.finalPayable || 0),
       note: dbInvoice.note,
     };
+  }
+
+  async convertProformaToInvoice(
+    proformaId: number,
+    companyId: number,
+  ): Promise<Invoice> {
+    return await this.dataSource.transaction(async (manager) => {
+      // 1. Ја наоѓаме профактурата со нејзините ставки (items)
+      const proforma = await manager.findOne(Invoice, {
+        where: { id: proformaId, companyId },
+        relations: { items: true },
+      });
+
+      if (!proforma) {
+        throw new NotFoundException('Профактурата не е пронајдена.');
+      }
+
+      if (proforma.documentType === DocumentType.INVOICE) {
+        throw new BadRequestException('Овој документ веќе е финална фактура.');
+      }
+
+      if (proforma.status === InvoiceStatus.CONVERTED) {
+        throw new BadRequestException(
+          'Профактурата веќе е конвертирана во фактура.',
+        );
+      }
+
+      // НОВА ЗАШТИТА: Дозволи конверзија САМО ако профактурата е претходно означена како платена
+      if (proforma.status !== InvoiceStatus.PROFORMA_PAID) {
+        throw new BadRequestException(
+          'Профактурата мора да биде во статус "Платена Профактура" за да може да се фактурира.',
+        );
+      }
+
+      const currentYear = new Date().getFullYear();
+
+      // 2. Го земаме следниот слободен број за ФИКАЛНА ФАКТУРА за таа фирма во оваа година
+      const nextInvoiceNumber = await this.getNextInvoiceNumber(
+        manager,
+        companyId,
+        currentYear,
+        DocumentType.INVOICE,
+      );
+
+      // 3. Ја ажурираме ОРИГИНАЛНАТА профактура во статус CONVERTED и ја зачувуваме
+      proforma.status = InvoiceStatus.CONVERTED;
+      await manager.save(Invoice, proforma);
+
+      // 4. Креираме СOСЕМ НОВ објект за Финалната Фактура
+      const newInvoice = manager.create(Invoice, {
+        companyId: proforma.companyId,
+        clientId: proforma.clientId,
+        documentType: DocumentType.INVOICE,
+        invoiceNo: nextInvoiceNumber,
+        year: currentYear,
+
+        // ИЗМЕНА: Бидејќи ја конвертираме од PROFORMA_PAID, новата фактура е веднаш ПЛАТЕНА
+        status: InvoiceStatus.PAID,
+
+        dueDate: new Date(), // Бидејќи е веќе платена, рокот може да биде и денешниот датум
+
+        // Суми од Invoice ентитетот
+        subtotalAmount: proforma.subtotalAmount,
+        vatAmount: proforma.vatAmount,
+        totalWithVat: proforma.totalWithVat,
+        roundingAmount: proforma.roundingAmount,
+        finalPayable: proforma.finalPayable,
+        note: proforma.note,
+
+        // Ставки точно по твојот InvoiceItem ентитет
+        items: proforma.items.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitOfMeasure: item.unitOfMeasure,
+          price: item.price,
+          discountPercent: item.discountPercent,
+          vatRate: item.vatRate,
+        })),
+      });
+
+      // Го зачувуваме новиот документ
+      return await manager.save(Invoice, newInvoice);
+    });
+  }
+
+  public async getNextInvoiceNumber(
+    manager: EntityManager,
+    companyId: number,
+    currentYear: number,
+    documentType: DocumentType, // Додаваме динамичен тип на документ
+  ): Promise<number> {
+    const lastInvoice = await manager.findOne(Invoice, {
+      where: {
+        companyId,
+        documentType, // Го користиме типот што сме го пратиле (INVOICE или PROFORMA)
+        year: currentYear,
+      },
+      order: { invoiceNo: 'DESC' },
+    });
+
+    if (!lastInvoice) {
+      return 1;
+    }
+
+    return lastInvoice.invoiceNo + 1;
+  }
+
+  async checkInvoiceNumberExists(
+    companyId: number,
+    invoiceNumber: number,
+    year: number,
+    documentType: DocumentType,
+    excludeInvoiceId?: number,
+  ): Promise<boolean> {
+    const query: any = {
+      companyId,
+      invoiceNo: invoiceNumber,
+      year: year,
+      documentType: documentType,
+    };
+
+    if (excludeInvoiceId) {
+      query.id = Not(excludeInvoiceId);
+    }
+
+    const count = await this.invoiceRepository.count({ where: query });
+    return count > 0;
   }
 }

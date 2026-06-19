@@ -24,7 +24,8 @@ import express from 'express'; // <--- ОВА Е КЛУЧНОТО! Мора да
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
-import { Invoice } from './entities/invoice.entity';
+import { DocumentType, Invoice } from './entities/invoice.entity';
+import { DataSource } from 'typeorm';
 
 interface AuthenticatedUser {
   userId: number;
@@ -43,6 +44,7 @@ export class InvoicesController {
   constructor(
     private readonly invoicesService: InvoicesService,
     private readonly pdfService: PdfService,
+    private readonly dataSource: DataSource,
   ) {}
 
   @Post()
@@ -145,5 +147,37 @@ export class InvoicesController {
   @UseGuards(JwtAuthGuard)
   async sendInvoiceEmail(@Param('id', ParseIntPipe) id: number) {
     return await this.invoicesService.sendInvoiceToEmail(id);
+  }
+
+  @Post(':id/convert')
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE) // Само сопственици и вработени можат да конвертираат
+  async convertProforma(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const companyId = req.user.companyId;
+
+    // Повик до сервисот кој веќе го средивме со трансакцијата
+    return await this.invoicesService.convertProformaToInvoice(id, companyId);
+  }
+
+  @Get('next-number/:type')
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
+  async getNextNumber(
+    @Param('type') type: DocumentType,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const companyId = req.user.companyId;
+    const currentYear = new Date().getFullYear();
+
+    // Повик до редизајнираната функција во сервисот
+    const nextNo = await this.invoicesService.getNextInvoiceNumber(
+      this.dataSource.manager, // или преку EntityManager
+      companyId,
+      currentYear,
+      type,
+    );
+
+    return { nextInvoiceNumber: nextNo };
   }
 }

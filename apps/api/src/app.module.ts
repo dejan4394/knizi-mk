@@ -10,22 +10,13 @@ import { UsersModule } from './users/users.module';
 import { PdfModule } from './pdf/pdf.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AppDataSource } from './config/data-source'; // Го увезуваме новиот data-source
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: process.env.DATABASE_URL,
-      host: process.env.DATABASE_URL ? undefined : 'localhost',
-      port: process.env.DATABASE_URL ? undefined : 5432,
-      username: process.env.DATABASE_URL ? undefined : 'postgres',
-      password: process.env.DATABASE_URL ? undefined : 'ilinamalinova2018',
-      database: process.env.DATABASE_URL ? undefined : 'knizi_db',
-      entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true,
-      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-    }),
+    // Ги проследуваме опциите директно од AppDataSource
+    TypeOrmModule.forRoot(AppDataSource.options),
     AuthModule,
     InvoicesModule,
     ClientsModule,

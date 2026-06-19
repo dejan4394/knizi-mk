@@ -4,7 +4,9 @@ export class AddedProformaPaidEnum1781879043419 implements MigrationInterface {
   name = 'AddedProformaPaidEnum1781879043419';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Со ADD VALUE IF NOT EXISTS спречуваме Postgres да фрли грешка ако статусот веќе е додаден локално
+    await queryRunner.query(
+      `ALTER TYPE "public"."invoices_status_enum" ADD VALUE IF NOT EXISTS 'CONVERTED'`,
+    );
     await queryRunner.query(
       `ALTER TYPE "public"."invoices_status_enum" ADD VALUE IF NOT EXISTS 'PROFORMA_PENDING'`,
     );
@@ -15,7 +17,7 @@ export class AddedProformaPaidEnum1781879043419 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `CREATE TYPE "public"."invoices_status_enum_old" AS ENUM('UNPAID', 'OVERDUE', 'PAID', 'CANCELED', 'CONVERTED')`,
+      `CREATE TYPE "public"."invoices_status_enum_old" AS ENUM('UNPAID', 'OVERDUE', 'PAID', 'CANCELED')`,
     );
     await queryRunner.query(
       `ALTER TABLE "invoices" ALTER COLUMN "status" TYPE "public"."invoices_status_enum_old" USING "status"::"text"::"public"."invoices_status_enum_old"`,

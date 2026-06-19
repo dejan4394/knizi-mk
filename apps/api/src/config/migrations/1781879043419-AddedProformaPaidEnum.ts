@@ -9,7 +9,7 @@ export class AddedProformaPaidEnum1781879043419 implements MigrationInterface {
       `ALTER TYPE "public"."invoices_status_enum" ADD VALUE IF NOT EXISTS 'PROFORMA_PENDING'`,
     );
     await queryRunner.query(
-      `ALTER TYPE "public"."invoices_status_enum" ADD VALUE IF NOT EXISTS 'PROFORPA_PAID'`,
+      `ALTER TYPE "public"."invoices_status_enum" ADD VALUE IF NOT EXISTS 'PROFORMA_PAID'`,
     );
   }
 

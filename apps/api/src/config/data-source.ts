@@ -1,9 +1,5 @@
 // src/config/data-source.ts
 import { DataSource } from 'typeorm';
-import * as dotenv from 'dotenv';
-
-// Го вчитуваме .env фајлот за CLI-то да може да ги прочита променливите на локалната машина
-dotenv.config();
 
 const isProduction = !!process.env.DATABASE_URL;
 

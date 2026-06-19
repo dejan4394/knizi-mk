@@ -102,6 +102,13 @@ export class InvoicesService {
     invoice.invoiceNo = Number(invoiceNo);
     invoice.year = currentYear;
     invoice.documentType = docType;
+
+    if (docType === DocumentType.PROFORMA) {
+      invoice.status = InvoiceStatus.PROFORMA_PENDING;
+    } else {
+      invoice.status = InvoiceStatus.UNPAID;
+    }
+
     invoice.companyId = loggedInCompanyId;
     invoice.clientId = Number(clientId);
     invoice.dueDate = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;

@@ -525,7 +525,7 @@ export class InvoicesService {
         );
       }
 
-      // НОВА ЗАШТИТА: Дозволи конверзија САМО ако профактурата е претходно означена како платена
+      // Дозволи конверзија САМО ако профактурата е претходно означена како платена
       if (proforma.status !== InvoiceStatus.PROFORMA_PAID) {
         throw new BadRequestException(
           'Профактурата мора да биде во статус "Платена Профактура" за да може да се фактурира.',
@@ -542,24 +542,21 @@ export class InvoicesService {
         DocumentType.INVOICE,
       );
 
-      // 3. Ја ажурираме ОРИГИНАЛНАТА профактура во статус CONVERTED и ја зачувуваме
-      proforma.status = InvoiceStatus.CONVERTED;
-      await manager.save(Invoice, proforma);
-
-      // 4. Креираме СOСЕМ НОВ објект за Финалната Фактура
+      // 3. Креираме СOСЕМ НОВ објект за Финалната Фактура
       const newInvoice = manager.create(Invoice, {
         companyId: proforma.companyId,
         clientId: proforma.clientId,
         documentType: DocumentType.INVOICE,
         invoiceNo: nextInvoiceNumber,
         year: currentYear,
+        status: InvoiceStatus.PAID, // Бидејќи доаѓа од платена профактура, финалната е веднаш PAID
+        dueDate: new Date(),
 
-        // ИЗМЕНА: Бидејќи ја конвертираме од PROFORMA_PAID, новата фактура е веднаш ПЛАТЕНА
-        status: InvoiceStatus.PAID,
+        // СВРЗУВАЊЕ ПРВ ДЕЛ: Новата фактура ја врзуваме со профактурата од која настана
+        convertedFromId: proforma.id,
+        convertedToId: null, // Ова е финална фактура, па нема каде понатаму да се конвертира
 
-        dueDate: new Date(), // Бидејќи е веќе платена, рокот може да биде и денешниот датум
-
-        // Суми од Invoice ентитетот
+        // Префрлање на финансиските суми
         subtotalAmount: proforma.subtotalAmount,
         vatAmount: proforma.vatAmount,
         totalWithVat: proforma.totalWithVat,
@@ -567,7 +564,7 @@ export class InvoicesService {
         finalPayable: proforma.finalPayable,
         note: proforma.note,
 
-        // Ставки точно по твојот InvoiceItem ентитет
+        // Префрлање на ставките (items)
         items: proforma.items.map((item) => ({
           description: item.description,
           quantity: item.quantity,
@@ -578,8 +575,19 @@ export class InvoicesService {
         })),
       });
 
-      // Го зачувуваме новиот документ
-      return await manager.save(Invoice, newInvoice);
+      // Ја зачувуваме новата фактура во база за да го генерираме нејзиното ID
+      const savedInvoice = await manager.save(Invoice, newInvoice);
+
+      // 4. Ја ажурираме ОРИГИНАЛНАТА профактура
+      proforma.status = InvoiceStatus.CONVERTED;
+
+      // СВРЗУВАЊЕ ВТОР ДЕЛ: На профактурата ѝ кажуваме точно во кое ID на финална фактура отиде
+      proforma.convertedToId = savedInvoice.id;
+
+      // Ја зачувуваме променетата профактура
+      await manager.save(Invoice, proforma);
+
+      return savedInvoice;
     });
   }
 

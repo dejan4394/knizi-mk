@@ -3,6 +3,7 @@ import {
   Column,
   OneToMany,
   ManyToOne,
+  OneToOne,
   JoinColumn,
   Unique,
 } from 'typeorm';
@@ -39,7 +40,6 @@ export class Invoice extends Base {
   })
   year!: number;
 
-  // НОВО: Тип на документ (Фактура или Профактура)
   @Column({
     type: 'enum',
     enum: DocumentType,
@@ -70,6 +70,25 @@ export class Invoice extends Base {
 
   @Column({ type: 'enum', enum: InvoiceStatus, default: InvoiceStatus.UNPAID })
   status!: InvoiceStatus;
+
+  @Column({ type: 'integer', nullable: true, name: 'converted_from_id' })
+  convertedFromId?: number | null;
+
+  @OneToOne(() => Invoice, (invoice) => invoice.convertedTo, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'converted_from_id' })
+  convertedFrom?: Invoice | null;
+
+  @Column({ type: 'integer', nullable: true, name: 'converted_to_id' })
+  convertedToId?: number | null;
+
+  @OneToOne(() => Invoice, (invoice) => invoice.convertedFrom, {
+    nullable: true,
+  })
+  @JoinColumn({ name: 'converted_to_id' })
+  convertedTo?: Invoice | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   subtotalAmount!: number;

@@ -31,8 +31,9 @@ export class ClientsService {
   }
 
   // 2. Листање на сите клиенти подредени по име
-  async findAll(): Promise<Client[]> {
+  async findAll(companyId: number): Promise<Client[]> {
     return await this.clientRepository.find({
+      where: { companyId },
       order: { name: 'ASC' },
     });
   }

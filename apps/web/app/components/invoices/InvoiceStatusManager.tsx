@@ -170,9 +170,25 @@ export default function InvoiceStatusManager({
   console.log(convertedFrom, convertedTo);
 
   return (
-    <Box sx={{ display: "inline-flex", flexDirection: "column", gap: 0.5 }}>
-      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1.5 }}>
-        <Box sx={{ minWidth: 160 }}>
+    <Box
+      sx={{
+        display: "inline-flex",
+        flexDirection: "column",
+        gap: 0.5,
+        width: "100%",
+      }}
+    >
+      {/* Го менуваме flexDirection од 'column' на 'row' во зависност од големината на екранот */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", sm: "row" }, // на мобилен (xs) ќе биде едно под друго, на десктоп (sm) во линија
+          alignItems: { xs: "stretch", sm: "center" }, // на мобилен ќе се рашират максимално
+          gap: 1.5,
+          width: "100%",
+        }}
+      >
+        <Box sx={{ minWidth: { xs: "100%", sm: 160 } }}>
           {updating ? (
             <Box
               sx={{ display: "flex", alignItems: "center", pl: 2, height: 24 }}
@@ -199,7 +215,12 @@ export default function InvoiceStatusManager({
                         backgroundColor: config?.bgColor,
                         color: config?.textColor,
                         cursor: isLocked ? "not-allowed" : "pointer",
-                        "& .MuiChip-label": { px: 1.5 },
+                        width: { xs: "100%", sm: "auto" }, // Чипот да ја фати цела ширина на мобилен за поубав изглед
+                        "& .MuiChip-label": {
+                          px: 1.5,
+                          width: "100%",
+                          textAlign: "center",
+                        },
                       }}
                     />
                   );
@@ -210,6 +231,7 @@ export default function InvoiceStatusManager({
                     paddingLeft: "4px",
                     display: "flex",
                     alignItems: "center",
+                    justifyContent: { xs: "center", sm: "flex-start" },
                   },
                   "& .MuiSelect-icon": {
                     display: isLocked ? "none" : "block",
@@ -280,9 +302,9 @@ export default function InvoiceStatusManager({
               textTransform: "none",
               fontWeight: "600",
               fontSize: "0.75rem",
-              py: 0.4,
+              py: 0.8, // малку поголем padding за полесно кликање на телефон
               px: 1.5,
-              "& Parks-root": {},
+              width: { xs: "100%", sm: "auto" }, // КЛУЧНО: На мобилен копчето ќе биде full-width и совршено видливо
               "&:hover": { backgroundColor: "#059669" },
             }}
           >
@@ -291,9 +313,17 @@ export default function InvoiceStatusManager({
         )}
       </Box>
 
-      {/* ЧЕКОР 1: Ако ова е Профактура која е веќе конвертирана, прикажи линк до Фактурата */}
+      {/* Линк до Фактурата */}
       {status === "CONVERTED" && localConvertedTo && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, pl: 0.5 }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            pl: 0.5,
+            mt: 0.5,
+          }}
+        >
           <LinkIcon sx={{ fontSize: "0.85rem", color: "text.secondary" }} />
           <Typography variant="caption" color="text.secondary">
             Линк до{" "}
@@ -311,14 +341,22 @@ export default function InvoiceStatusManager({
         </Box>
       )}
 
-      {/* ЧЕКОР 2: Ако ова е обична финална Фактура која настанало од Профактура */}
+      {/* Од Профактура */}
       {convertedFrom && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, pl: 0.5 }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            pl: 0.5,
+            mt: 0.5,
+          }}
+        >
           <LinkIcon sx={{ fontSize: "0.85rem", color: "text.secondary" }} />
           <Typography variant="caption" color="text.secondary">
             Од{" "}
             <Link
-              href={`/invoices/${convertedFrom.id}/edit`} // или соодветната рута за профактури ако е различна
+              href={`/invoices/${convertedFrom.id}/edit`}
               style={{
                 color: "#2563eb",
                 textDecoration: "underline",

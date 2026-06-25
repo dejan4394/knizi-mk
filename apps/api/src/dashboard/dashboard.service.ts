@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Invoice } from '../invoices/entities/invoice.entity';
+import {
+  Invoice,
+  DocumentType,
+  InvoiceStatus,
+} from '../invoices/entities/invoice.entity';
 
 @Injectable()
 export class DashboardService {
@@ -10,7 +14,8 @@ export class DashboardService {
     private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
-  async getStats(companyId: string) {
+  async getStats(companyId: number) {
+    // Сменето во number за да одговара на новата шема
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(
@@ -27,46 +32,65 @@ export class DashboardService {
     const companyResult = await this.invoiceRepository.manager
       .createQueryBuilder()
       .select('company.name', 'name')
-      .from('companies', 'company') // Провери дали табелата ти е 'companies' или 'company'
+      .from('companies', 'company')
       .where('company.id = :companyId', { companyId })
       .getRawOne();
 
     const companyName = companyResult?.name || 'Моја Компанија';
 
-    // 1. ПРОМЕТ И ДДВ ОВОЈ МЕСЕЦ ЗА НАЈАВЕНАТА КОМПАНИЈА
+    // 1. ПРОМЕТ И ДДВ ОВОЈ МЕСЕЦ (Само реални фактури, исклучуваме Профактури и Сторнирани)
     const monthTotalResult = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .select('SUM(invoice.finalPayable)', 'sum')
       .addSelect('SUM(invoice.vatAmount)', 'vatSum')
       .where('invoice.companyId = :companyId', { companyId })
+      .andWhere('invoice.documentType = :docType', {
+        docType: DocumentType.INVOICE,
+      })
+      .andWhere('invoice.status != :canceledStatus', {
+        canceledStatus: InvoiceStatus.CANCELED,
+      })
       .andWhere('invoice.created_at BETWEEN :start AND :end', {
         start: startOfMonth,
         end: endOfMonth,
       })
       .getRawOne();
 
-    // 2. ВКУПНО НАПЛАТЕНИ СРЕДСТВА (Каде статусот е PAID)
+    // 2. ВКУПНО НАПЛАТЕНИ СРЕДСТВА (Редовни платени фактури + Платени профактури)
     const totalPaidResult = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .select('SUM(invoice.finalPayable)', 'sum')
       .where('invoice.companyId = :companyId', { companyId })
-      .andWhere('invoice.status = :status', { status: 'PAID' })
+      .andWhere('invoice.status IN (:...statuses)', {
+        statuses: [InvoiceStatus.PAID, InvoiceStatus.PROFORMA_PAID],
+      })
       .getRawOne();
 
-    // 3. ВКУПНО ПОБАРУВАЊА (Сега филтрираме строго по твојот статус UNPAID)
+    // 3. ВКУПНО ПОБАРУВАЊА (Сè што чека наплата: UNPAID, OVERDUE и PROFORMA_PENDING)
     const totalReceivablesResult = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .select('SUM(invoice.finalPayable)', 'sum')
       .where('invoice.companyId = :companyId', { companyId })
-      .andWhere('invoice.status = :status', { status: 'UNPAID' })
+      .andWhere('invoice.status IN (:...statuses)', {
+        statuses: [
+          InvoiceStatus.UNPAID,
+          InvoiceStatus.OVERDUE,
+          InvoiceStatus.PROFORMA_PENDING,
+        ],
+      })
       .getRawOne();
 
-    // 4. КРИТИЧНИ ФАКТУРИ ШТО ДОЦНАТ (Статус UNPAID, а поминат рок)
+    // 4. КРИТИЧНИ ФАКТУРИ ШТО ДОЦНАТ (Само реални фактури кои се UNPAID/OVERDUE и поминал рокот)
     const rawCriticalInvoices = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.client', 'client')
       .where('invoice.companyId = :companyId', { companyId })
-      .andWhere('invoice.status = :status', { status: 'UNPAID' }) // Променето во UNPAID
+      .andWhere('invoice.documentType = :docType', {
+        docType: DocumentType.INVOICE,
+      })
+      .andWhere('invoice.status IN (:...statuses)', {
+        statuses: [InvoiceStatus.UNPAID, InvoiceStatus.OVERDUE],
+      })
       .andWhere('invoice.dueDate < :now', { now })
       .orderBy('invoice.dueDate', 'ASC')
       .take(5)

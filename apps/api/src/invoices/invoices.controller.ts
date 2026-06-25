@@ -3,14 +3,12 @@ import {
   Get,
   Post,
   Body,
-  // Patch,
   Param,
   UseGuards,
   Req,
   Res,
   Patch,
   ParseIntPipe,
-  // Delete,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -19,24 +17,14 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/users/enums/user.enum';
 import { PdfService } from 'src/pdf/pdf.service';
-// import { UpdateInvoiceDto } from './dto/update-invoice.dto';
-import express from 'express'; // <--- ОВА Е КЛУЧНОТО! Мора да е од 'express'
-import { InvoiceItem } from './entities/invoice-item.entity';
+import express from 'express';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
 import { DocumentType, Invoice } from './entities/invoice.entity';
 import { DataSource } from 'typeorm';
 
-interface AuthenticatedUser {
-  userId: number;
-  email: string;
-  role: string;
-  companyId: number;
-}
-
-interface AuthenticatedRequest extends Request {
-  user: AuthenticatedUser;
-}
+// --- НОВИОТ УВОЗ ОД ГЛОБАЛНОТО МЕСТО ---
+import type { AuthenticatedRequest } from 'src/auth/interfaces/authenticated-request.interface';
 
 @Controller('invoices')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -69,11 +57,6 @@ export class InvoicesController {
     return this.invoicesService.findOne(+id);
   }
 
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.invoicesService.remove(+id);
-  // }
-
   @Get(':id/pdf')
   @UseGuards(JwtAuthGuard)
   async downloadInvoicePdf(
@@ -83,7 +66,6 @@ export class InvoicesController {
   ) {
     try {
       const companyId = req.user.companyId;
-
       const dbInvoice = await this.invoicesService.findOne(Number(id));
 
       if (!dbInvoice) {
@@ -126,7 +108,6 @@ export class InvoicesController {
     @Req() req: AuthenticatedRequest,
   ) {
     const companyId = req.user.companyId;
-
     return await this.invoicesService.update(
       Number(id),
       updateInvoiceDto,
@@ -150,14 +131,12 @@ export class InvoicesController {
   }
 
   @Post(':id/convert')
-  @Roles(UserRole.OWNER, UserRole.EMPLOYEE) // Само сопственици и вработени можат да конвертираат
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
   async convertProforma(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: AuthenticatedRequest,
   ) {
     const companyId = req.user.companyId;
-
-    // Повик до сервисот кој веќе го средивме со трансакцијата
     return await this.invoicesService.convertProformaToInvoice(id, companyId);
   }
 
@@ -170,9 +149,8 @@ export class InvoicesController {
     const companyId = req.user.companyId;
     const currentYear = new Date().getFullYear();
 
-    // Повик до редизајнираната функција во сервисот
     const nextNo = await this.invoicesService.getNextInvoiceNumber(
-      this.dataSource.manager, // или преку EntityManager
+      this.dataSource.manager,
       companyId,
       currentYear,
       type,

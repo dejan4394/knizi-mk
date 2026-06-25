@@ -97,7 +97,7 @@ export default function Sidebar() {
             variant="h5"
             sx={{ fontWeight: "bold", color: "#38bdf8" }}
           >
-            Книжи.мк
+            книжи.мк
           </Typography>
           <Typography
             variant="caption"

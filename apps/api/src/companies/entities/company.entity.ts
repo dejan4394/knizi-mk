@@ -2,6 +2,7 @@ import { Entity, Column, OneToMany } from 'typeorm';
 import { Invoice } from '../../invoices/entities/invoice.entity';
 import { Base } from '../../invoices/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
+import { Client } from '../../clients/entities/client.entity';
 
 @Entity('companies')
 export class Company extends Base {
@@ -20,7 +21,6 @@ export class Company extends Base {
   @Column({ nullable: true })
   bankName?: string;
 
-  // --- НОВИ КОЛОНИ ТУКА ---
   @Column({ nullable: true })
   phone?: string;
 
@@ -36,7 +36,7 @@ export class Company extends Base {
   @Column({ nullable: true })
   smtpUser?: string;
 
-  @Column({ nullable: true, select: false }) // select: false за безбедност, да не ја влече лозинката во обични кверија
+  @Column({ nullable: true, select: false })
   smtpPass?: string;
 
   @OneToMany(() => Invoice, (invoice) => invoice.company)
@@ -44,4 +44,8 @@ export class Company extends Base {
 
   @OneToMany(() => User, (user) => user.company)
   users!: User[];
+
+  // --- НОВАТА РЕЛАЦИЈА ТУКА ---
+  @OneToMany(() => Client, (client) => client.company)
+  clients!: Client[];
 }

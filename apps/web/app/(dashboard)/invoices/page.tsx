@@ -96,17 +96,16 @@ export default function InvoicesListComponent() {
   const handleSendEmail = async (id: number, invoiceNo: number) => {
     try {
       setSendingEmailId(id);
-      const res = await fetch(`/api/invoices/${id}/send-email`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        alert(`Фактурата бр. ${invoiceNo} е успешно испратена по е-пошта.`);
-        fetchInvoices(); // Освежи статус на испраќање
-      } else {
-        alert("Грешка при испраќање на е-поштата.");
-      }
-    } catch (error) {
-      console.error(error);
+      await api.post(`/invoices/${id}/send-email`);
+      alert(
+        `Фактурата ${invoiceNo} е успешно испратена на е-маил до клиентот.`,
+      );
+      fetchInvoices();
+    } catch (err: any) {
+      console.error("Грешка при праќање е-маил:", err);
+      alert(
+        `Неуспешно праќање: ${err.response?.data?.message || "Системска грешка."}`,
+      );
     } finally {
       setSendingEmailId(null);
     }
@@ -210,7 +209,7 @@ export default function InvoicesListComponent() {
             >
               <MenuItem value="ALL">Сите</MenuItem>
               <MenuItem value="PAID">Платени</MenuItem>
-              <MenuItem value="PENDING">Неплатени</MenuItem>
+              <MenuItem value="UNPAID">Неплатени</MenuItem>
               <MenuItem value="PROFORMA_PENDING">
                 Профактури - Неплатени
               </MenuItem>

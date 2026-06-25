@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import api from "../../../utils/services/api";
 
 import {
@@ -15,14 +15,15 @@ import {
   Divider,
   IconButton,
   InputAdornment,
-  Link, // ДОДАДЕНО: MUI Link компонента
+  Link,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
-import BusinessIcon from "@mui/icons-material/Business";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import LaunchIcon from "@mui/icons-material/Launch"; // ДОДАДЕНО: Икона за надворешен линк
+import LaunchIcon from "@mui/icons-material/Launch";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { Tooltip } from "@mui/material";
 
 export default function MyCompanySettingsPage() {
@@ -30,6 +31,8 @@ export default function MyCompanySettingsPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState<boolean>(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [companyData, setCompanyData] = useState({
     name: "",
@@ -43,6 +46,7 @@ export default function MyCompanySettingsPage() {
     smtpPort: 465,
     smtpUser: "",
     smtpPass: "",
+    logoUrl: "", // Ова поле сега ќе го чува целиот Base64 стринг (data:image/...)
   });
 
   useEffect(() => {
@@ -63,6 +67,7 @@ export default function MyCompanySettingsPage() {
             smtpPort: response.data.smtpPort || 465,
             smtpUser: response.data.smtpUser || "",
             smtpPass: "",
+            logoUrl: response.data.logoUrl || "", // Го вчитуваме Base64 стрингот од база
           });
         }
       } catch (err: any) {
@@ -78,6 +83,40 @@ export default function MyCompanySettingsPage() {
     fetchCompanyData();
   }, []);
 
+  // Хендлер за процесирање на сликата и претворање во Base64 на фронтенд
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Ве молиме изберете валидна слика (PNG, JPG).");
+      return;
+    }
+
+    // Добра пракса кога чуваме Base64 е да ставиме примерен лимит (на пр. 150KB) за да не ја преоптовариме базата
+    if (file.size > 150 * 1024) {
+      alert(
+        "Логото е преголемо. Ве молиме прикачете слика помала од 150 KB за оптимални перформанси.",
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // reader.result содржи "data:image/png;base64,iVBORw0KGgoAAA..."
+      setCompanyData((prev) => ({ ...prev, logoUrl: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Хендлер за отстранување на логото од формата (чистење на стрингот)
+  const handleLogoRemove = () => {
+    setCompanyData((prev) => ({ ...prev, logoUrl: "" }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""; // Го ресетираме input-от за да може пак истата слика да се избере
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -87,12 +126,15 @@ export default function MyCompanySettingsPage() {
         ...companyData,
         smtpPort: Number(companyData.smtpPort),
         smtpPass: companyData.smtpPass || undefined,
+        // Овде автоматски си оди логото како дел од целиот payload во `logoUrl`
       };
 
       await api.put("/companies/my-company", payload);
 
       setCompanyData((prev) => ({ ...prev, smtpPass: "" }));
-      alert("Податоците за вашата фирма се успешно зачувани!");
+      alert(
+        "Податоците за вашата фирма, вклучувајќи го и логото, се успешно зачувани!",
+      );
     } catch (err: any) {
       console.error("Грешка при зачувување фирма:", err);
       alert(
@@ -126,20 +168,20 @@ export default function MyCompanySettingsPage() {
     <Box
       component="form"
       onSubmit={handleSubmit}
-      sx={{ maxWidth: "800px", margin: "0 auto" }}
+      sx={{ maxWidth: "800px", margin: "0 auto", px: 2 }}
     >
       <Box
         sx={{
           display: "flex",
-          alignItems: "center",
+          flexDirection: { xs: "column", sm: "row" },
+          alignItems: { xs: "center", sm: "flex-start" },
           justifyContent: "space-between",
           gap: 2,
           mb: 4,
           width: "100%",
         }}
       >
-        {/* <BusinessIcon sx={{ fontSize: 40, color: "#0070f3" }} /> */}
-        <Box>
+        <Box sx={{ textAlign: { xs: "center", sm: "left" } }}>
           <Typography
             component="h1"
             sx={{
@@ -147,22 +189,14 @@ export default function MyCompanySettingsPage() {
               color: "#0f172a",
               fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
               lineHeight: 1.2,
-              textAlign: { xs: "center", sm: "left" },
-              width: { xs: "100%", sm: "auto" },
+              mb: 1,
             }}
           >
             Профил на Мојата Фирма
           </Typography>
-          <Typography
-            variant="body2"
-            color="textSecondary"
-            sx={{
-              textAlign: { xs: "center", sm: "left" },
-              width: { xs: "100%", sm: "auto" },
-            }}
-          >
-            Уредете ги генералиите и SMTP е-маил поставките на вашата компанија
-            за правилно издавање на фактурите.
+          <Typography variant="body2" color="textSecondary">
+            Уредете ги генералиите, логото и SMTP е-маил поставките на вашата
+            компанија за правилно издавање на фактурите.
           </Typography>
         </Box>
       </Box>
@@ -182,6 +216,108 @@ export default function MyCompanySettingsPage() {
       >
         <CardContent>
           <Grid container spacing={3}>
+            {/* СЕКЦИЈА ЗА ЛОГО (BASE64 PREVIEW & UPLOAD) */}
+            <Grid size={{ xs: 12 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 1.5,
+                  p: 3,
+                  border: "2px dashed #e2e8f0",
+                  borderRadius: "8px",
+                  backgroundColor: "#f8fafc",
+                  textAlign: "center",
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: "600", color: "#334155" }}
+                >
+                  Официјално логo на фирмата
+                </Typography>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleLogoChange}
+                  style={{ display: "none" }}
+                />
+
+                {companyData.logoUrl ? (
+                  <Box
+                    sx={{
+                      position: "relative",
+                      display: "inline-block",
+                      mt: 1,
+                    }}
+                  >
+                    {/* Тагот директно го рендерира Base64 стрингот без проблем */}
+                    <Box
+                      component="img"
+                      src={companyData.logoUrl}
+                      alt="Лого Преглед"
+                      sx={{
+                        maxHeight: 100,
+                        maxWidth: "100%",
+                        objectFit: "contain",
+                        borderRadius: "6px",
+                        p: 1,
+                        backgroundColor: "#fff",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                      }}
+                    />
+                    <Tooltip title="Отстрани го логото" placement="top">
+                      <IconButton
+                        onClick={handleLogoRemove}
+                        size="small"
+                        sx={{
+                          position: "absolute",
+                          top: -10,
+                          right: -10,
+                          backgroundColor: "#ef4444",
+                          color: "white",
+                          "&:hover": { backgroundColor: "#dc2626" },
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                ) : (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <CloudUploadIcon sx={{ fontSize: 40, color: "#94a3b8" }} />
+                    <Typography variant="caption" color="textSecondary">
+                      Прикачете слика која ќе се зачува директно во вашиот
+                      профил (макс. 150KB).
+                    </Typography>
+                  </Box>
+                )}
+
+                {!companyData.logoUrl && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => fileInputRef.current?.click()}
+                    sx={{ textTransform: "none", fontWeight: "600", mt: 1 }}
+                  >
+                    Избери Слика
+                  </Button>
+                )}
+              </Box>
+            </Grid>
+
+            {/* ОСТАНАТИ ГЕНЕРАЛНИ ПОДАТОЦИ */}
             <Grid size={{ xs: 12 }}>
               <TextField
                 label="Официјален назив на фирмата"
@@ -267,6 +403,7 @@ export default function MyCompanySettingsPage() {
               />
             </Grid>
 
+            {/* SMTP СЕКЦИЈА */}
             <Grid size={{ xs: 12 }}>
               <Divider sx={{ my: 2 }}>
                 <Typography
@@ -344,7 +481,7 @@ export default function MyCompanySettingsPage() {
               />
             </Grid>
 
-            {/* АЖУРИРАНО: Вклучено и in-v3.mailjet.com со икона за брзо копирање */}
+            {/* УПАТСТВО ЗА MAILJET */}
             <Grid size={{ xs: 12 }}>
               <Box
                 sx={{
@@ -369,7 +506,7 @@ export default function MyCompanySettingsPage() {
                 </Typography>
                 <Typography
                   variant="caption"
-                  component="div" // Променето во div за да дозволи блок елементи внатре
+                  component="div"
                   sx={{
                     color: "#64748b",
                     display: "block",
@@ -385,7 +522,6 @@ export default function MyCompanySettingsPage() {
                     sx={{
                       color: "#7c3aed",
                       fontWeight: "bold",
-                      inlineFlex: "center",
                       textDecoration: "underline",
                     }}
                   >
@@ -420,10 +556,9 @@ export default function MyCompanySettingsPage() {
                       <IconButton
                         size="small"
                         sx={{ p: 0.3, color: "#7c3aed" }}
-                        onClick={() => {
-                          navigator.clipboard.writeText("in-v3.mailjet.com");
-                          // alert("Хостот е копиран во таблата!");
-                        }}
+                        onClick={() =>
+                          navigator.clipboard.writeText("in-v3.mailjet.com")
+                        }
                       >
                         <ContentCopyIcon sx={{ fontSize: 13 }} />
                       </IconButton>
@@ -478,7 +613,7 @@ export default function MyCompanySettingsPage() {
         </CardContent>
       </Card>
 
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 4, mb: 4 }}>
         <Button
           type="submit"
           variant="contained"

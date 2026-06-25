@@ -47,6 +47,7 @@ interface Client {
 }
 
 interface Invoice {
+  documentType: string;
   id: number;
   invoiceNo: number;
   status: InvoiceStatus;
@@ -85,11 +86,35 @@ export default function InvoicesListComponent() {
   }, []);
 
   // --- Хендлери за акции ---
-  const handleDownloadPdf = async (id: number, invoiceNo: number) => {
+
+  const handleDownload = async (
+    id: number,
+    invoiceNo: number,
+    documentType: string,
+  ) => {
     try {
-      window.open(`/api/invoices/${id}/pdf`, "_blank");
-    } catch (error) {
-      console.error("Грешка при преземање PDF:", error);
+      // Го повикуваме бекендот со соодветниот responseType за бинарни податоци (blob)
+      const response = await api.get(`/invoices/${id}/pdf`, {
+        responseType: "blob",
+      });
+
+      // Креираме Blob објект од податоците
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+
+      // Динамично име во зависност од типот (Фактура или Профактура)
+      const prefix = documentType === "PROFORMA" ? "Profaktura" : "Faktura";
+      link.download = `${prefix}-${invoiceNo}.pdf`;
+
+      // Го симулираме кликот за преземање
+      link.click();
+
+      // Чистиме во меморијата
+      window.URL.revokeObjectURL(link.href);
+    } catch (err) {
+      console.error("Грешка при преземање на PDF:", err);
+      alert("Неуспешно преземање на PDF фајлот.");
     }
   };
 
@@ -491,7 +516,11 @@ export default function InvoicesListComponent() {
 
                       <IconButton
                         onClick={() =>
-                          handleDownloadPdf(invoice.id, invoice.invoiceNo)
+                          handleDownload(
+                            invoice.id,
+                            invoice.invoiceNo,
+                            invoice.documentType,
+                          )
                         }
                         size="small"
                         sx={{ color: "#16a34a", backgroundColor: "#dcfce7" }}
@@ -683,7 +712,11 @@ export default function InvoicesListComponent() {
                         </Button>
                         <Button
                           onClick={() =>
-                            handleDownloadPdf(invoice.id, invoice.invoiceNo)
+                            handleDownload(
+                              invoice.id,
+                              invoice.invoiceNo,
+                              invoice.documentType,
+                            )
                           }
                           variant="outlined"
                           color="success"

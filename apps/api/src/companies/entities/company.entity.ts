@@ -27,6 +27,9 @@ export class Company extends Base {
   @Column({ nullable: true })
   email?: string;
 
+  @Column({ type: 'text', nullable: true })
+  logoUrl?: string;
+
   @Column({ nullable: true })
   smtpHost?: string;
 
@@ -45,7 +48,6 @@ export class Company extends Base {
   @OneToMany(() => User, (user) => user.company)
   users!: User[];
 
-  // --- НОВАТА РЕЛАЦИЈА ТУКА ---
   @OneToMany(() => Client, (client) => client.company)
   clients!: Client[];
 }

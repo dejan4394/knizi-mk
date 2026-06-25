@@ -454,6 +454,7 @@ export class InvoicesService {
       status: dbInvoice.status,
       invoiceNumber: dbInvoice.invoiceNo,
       year: dbInvoice.year,
+      companyLogo: dbInvoice.company?.logoUrl || null,
       companyName: dbInvoice.company?.name || 'Моја Компанија',
       companyEdb: dbInvoice.company?.edb || '',
       companyAddress: dbInvoice.company?.address || '',

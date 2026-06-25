@@ -36,6 +36,10 @@ export class CompaniesService {
         bankName: dto.bankName,
         phone: dto.phone,
         email: dto.email,
+
+        // ДОДАДЕНО: Зачувување на Base64 логото при креирање
+        logoUrl: dto.logoUrl || null,
+
         // Додаваме SMTP вредности при креирање
         smtpHost: dto.smtpHost || null,
         smtpPort: dto.smtpPort ? Number(dto.smtpPort) : 465,
@@ -51,8 +55,7 @@ export class CompaniesService {
       company.bankName = dto.bankName;
       company.phone = dto.phone;
       company.email = dto.email;
-
-      // Новите SMTP генералии
+      company.logoUrl = dto.logoUrl || null;
       company.smtpHost = dto.smtpHost || null;
       company.smtpPort = dto.smtpPort ? Number(dto.smtpPort) : 465;
       company.smtpUser = dto.smtpUser || null;

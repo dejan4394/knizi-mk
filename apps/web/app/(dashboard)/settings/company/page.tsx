@@ -24,6 +24,8 @@ import LaunchIcon from "@mui/icons-material/Launch";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DeleteIcon from "@mui/icons-material/Delete";
+import FingerprintIcon from "@mui/icons-material/Fingerprint";
+import VpnKeyIcon from "@mui/icons-material/VpnKey"; // Иконка за Profile ID
 import { Tooltip } from "@mui/material";
 
 export default function MyCompanySettingsPage() {
@@ -46,7 +48,9 @@ export default function MyCompanySettingsPage() {
     smtpPort: 465,
     smtpUser: "",
     smtpPass: "",
-    logoUrl: "", // Ова поле сега ќе го чува целиот Base64 стринг (data:image/...)
+    logoUrl: "",
+    companyOneId: "", // КИБС OneID Идентификатор
+    kibsProfileId: "", // КИБС Профил ИД (SignPlus API системски клуч)
   });
 
   useEffect(() => {
@@ -67,7 +71,9 @@ export default function MyCompanySettingsPage() {
             smtpPort: response.data.smtpPort || 465,
             smtpUser: response.data.smtpUser || "",
             smtpPass: "",
-            logoUrl: response.data.logoUrl || "", // Го вчитуваме Base64 стрингот од база
+            logoUrl: response.data.logoUrl || "",
+            companyOneId: response.data.companyOneId || "", // Вчитување од база
+            kibsProfileId: response.data.kibsProfileId || "", // Вчитување од база
           });
         }
       } catch (err: any) {
@@ -83,7 +89,6 @@ export default function MyCompanySettingsPage() {
     fetchCompanyData();
   }, []);
 
-  // Хендлер за процесирање на сликата и претворање во Base64 на фронтенд
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -93,7 +98,6 @@ export default function MyCompanySettingsPage() {
       return;
     }
 
-    // Добра пракса кога чуваме Base64 е да ставиме примерен лимит (на пр. 150KB) за да не ја преоптовариме базата
     if (file.size > 150 * 1024) {
       alert(
         "Логото е преголемо. Ве молиме прикачете слика помала од 150 KB за оптимални перформанси.",
@@ -103,17 +107,15 @@ export default function MyCompanySettingsPage() {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      // reader.result содржи "data:image/png;base64,iVBORw0KGgoAAA..."
       setCompanyData((prev) => ({ ...prev, logoUrl: reader.result as string }));
     };
     reader.readAsDataURL(file);
   };
 
-  // Хендлер за отстранување на логото од формата (чистење на стрингот)
   const handleLogoRemove = () => {
     setCompanyData((prev) => ({ ...prev, logoUrl: "" }));
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // Го ресетираме input-от за да може пак истата слика да се избере
+      fileInputRef.current.value = "";
     }
   };
 
@@ -126,14 +128,13 @@ export default function MyCompanySettingsPage() {
         ...companyData,
         smtpPort: Number(companyData.smtpPort),
         smtpPass: companyData.smtpPass || undefined,
-        // Овде автоматски си оди логото како дел од целиот payload во `logoUrl`
       };
 
       await api.put("/companies/my-company", payload);
 
       setCompanyData((prev) => ({ ...prev, smtpPass: "" }));
       alert(
-        "Податоците за вашата фирма, вклучувајќи го и логото, се успешно зачувани!",
+        "Податоците за вашата фирма, вклучувајќи ги и КИБС поставките, се успешно зачувани!",
       );
     } catch (err: any) {
       console.error("Грешка при зачувување фирма:", err);
@@ -168,7 +169,7 @@ export default function MyCompanySettingsPage() {
     <Box
       component="form"
       onSubmit={handleSubmit}
-      sx={{ maxWidth: "800px", margin: "0 auto", px: 2 }}
+      sx={{ maxWidth: "800px", margin: "0 auto" }}
     >
       <Box
         sx={{
@@ -195,8 +196,9 @@ export default function MyCompanySettingsPage() {
             Профил на Мојата Фирма
           </Typography>
           <Typography variant="body2" color="textSecondary">
-            Уредете ги генералиите, логото и SMTP е-маил поставките на вашата
-            компанија за правилно издавање на фактурите.
+            Уредете ги генералиите, логото, SMTP е-маил и КИБС интеграциите на
+            вашата компанија за правилно издавање, праќање и потпишување на
+            фактурите.
           </Typography>
         </Box>
       </Box>
@@ -211,12 +213,12 @@ export default function MyCompanySettingsPage() {
         sx={{
           boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
           borderRadius: "12px",
-          p: 2,
+          // p: 2,
         }}
       >
         <CardContent>
           <Grid container spacing={3}>
-            {/* СЕКЦИЈА ЗА ЛОГО (BASE64 PREVIEW & UPLOAD) */}
+            {/* СЕКЦИЈА ЗА ЛОГО */}
             <Grid size={{ xs: 12 }}>
               <Box
                 sx={{
@@ -254,7 +256,6 @@ export default function MyCompanySettingsPage() {
                       mt: 1,
                     }}
                   >
-                    {/* Тагот директно го рендерира Base64 стрингот без проблем */}
                     <Box
                       component="img"
                       src={companyData.logoUrl}
@@ -317,7 +318,7 @@ export default function MyCompanySettingsPage() {
               </Box>
             </Grid>
 
-            {/* ОСТАНАТИ ГЕНЕРАЛНИ ПОДАТОЦИ */}
+            {/* ГЕНЕРАЛНИ ПОДАТОЦИ */}
             <Grid size={{ xs: 12 }}>
               <TextField
                 label="Официјален назив на фирмата"
@@ -405,10 +406,27 @@ export default function MyCompanySettingsPage() {
 
             {/* SMTP СЕКЦИЈА */}
             <Grid size={{ xs: 12 }}>
-              <Divider sx={{ my: 2 }}>
+              <Divider
+                sx={{
+                  my: 3,
+                  "&::before, &::after": {
+                    // На мобилен ги криеме линиите за чист изглед, од таблет па нагоре ги враќаме
+                    display: { xs: "none", md: "block" },
+                  },
+                }}
+              >
                 <Typography
                   variant="body2"
-                  sx={{ color: "#7c3aed", fontWeight: "600" }}
+                  sx={{
+                    color: "#7c3aed",
+                    fontWeight: "600",
+                    textAlign: "center",
+                    // КЛУЧНО: На мобилен се крши нормално, на десктоп (md) СЕКОГАШ во една линија
+                    whiteSpace: { xs: "normal", md: "nowrap" },
+                    fontSize: { xs: "0.85rem", sm: "0.875rem" },
+                    px: { xs: 0, md: 3 },
+                    lineHeight: 1.4,
+                  }}
                 >
                   Поставки за излезен е-маил сервер (Mailjet / SMTP)
                 </Typography>
@@ -608,6 +626,72 @@ export default function MyCompanySettingsPage() {
                   (разделени со две точки).
                 </Typography>
               </Box>
+            </Grid>
+            {/* СЕКЦИЈА ЗА КИБС / ONEID */}
+            <Grid size={{ xs: 12 }}>
+              <Divider
+                sx={{
+                  my: 3,
+                  "&::before, &::after": {
+                    display: { xs: "none", md: "block" },
+                  },
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "#0070f3",
+                    fontWeight: "600",
+                    textAlign: "center",
+                    // КЛУЧНО: На мобилен се крши нормално, на десктоп (md) СЕКОГАШ во една линија
+                    whiteSpace: { xs: "normal", md: "nowrap" },
+                    fontSize: { xs: "0.85rem", sm: "0.875rem" },
+                    px: { xs: 0, md: 3 },
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Дигитално потпишување фактури (КИБС OneID / SignPlus)
+                </Typography>
+              </Divider>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="OneID Идентификатор на компанијата"
+                fullWidth
+                placeholder="ЕМБГ или Е-маил поврзан со OneID апликацијата"
+                value={companyData.companyOneId}
+                onChange={(e) => handleChange("companyOneId", e.target.value)}
+                helperText="Се користи за иницирање Push барање за потпис на мобилниот уред на корисникот."
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <FingerprintIcon sx={{ color: "#0070f3" }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="КИБС Профил ID (SignPlus API Key)"
+                fullWidth
+                placeholder="Внесете го системскиот профил токен добиен од КИБС"
+                value={companyData.kibsProfileId}
+                onChange={(e) => handleChange("kibsProfileId", e.target.value)}
+                helperText="Интерно UUID/токен поле преку кое бекендот се автентицира кон SignPlus API системот."
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <VpnKeyIcon sx={{ color: "#0070f3" }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
             </Grid>
           </Grid>
         </CardContent>

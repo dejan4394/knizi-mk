@@ -33,14 +33,14 @@ import DownloadIcon from "@mui/icons-material/Download";
 import EmailIcon from "@mui/icons-material/Email";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import DrawIcon from "@mui/icons-material/Draw"; // Икона за потпишување
+
 import InvoiceStatusManager, {
   InvoiceStatus,
 } from "../../components/invoices/InvoiceStatusManager";
 import api from "../../utils/services/api";
 
-// Твои локални компоненти (прилагоди патеки по потреба)
-
-// --- Типови (Замени со твоите реални интерфејси ако се во друг фајл) ---
+// --- Типови ---
 interface Client {
   id: number;
   name: string;
@@ -67,6 +67,7 @@ export default function InvoicesListComponent() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
+  const [signingId, setSigningId] = useState<number | null>(null); // State за потпишување
 
   // --- Фетчување податоци ---
   const fetchInvoices = async () => {
@@ -93,24 +94,18 @@ export default function InvoicesListComponent() {
     documentType: string,
   ) => {
     try {
-      // Го повикуваме бекендот со соодветниот responseType за бинарни податоци (blob)
       const response = await api.get(`/invoices/${id}/pdf`, {
         responseType: "blob",
       });
 
-      // Креираме Blob објект од податоците
       const blob = new Blob([response.data], { type: "application/pdf" });
       const link = document.createElement("a");
       link.href = window.URL.createObjectURL(blob);
 
-      // Динамично име во зависност од типот (Фактура или Профактура)
       const prefix = documentType === "PROFORMA" ? "Profaktura" : "Faktura";
       link.download = `${prefix}-${invoiceNo}.pdf`;
 
-      // Го симулираме кликот за преземање
       link.click();
-
-      // Чистиме во меморијата
       window.URL.revokeObjectURL(link.href);
     } catch (err) {
       console.error("Грешка при преземање на PDF:", err);
@@ -133,6 +128,22 @@ export default function InvoicesListComponent() {
       );
     } finally {
       setSendingEmailId(null);
+    }
+  };
+
+  const handleSignInvoice = async (id: number, invoiceNo: number) => {
+    try {
+      setSigningId(id);
+      await api.post(`/invoices/${id}/sign`);
+      alert(`Фактурата ${invoiceNo} е успешно потпишана/фискализирана.`);
+      fetchInvoices(); // Освежи за да се види новиот статус/промени
+    } catch (err: any) {
+      console.error("Грешка при потпишување на фактура:", err);
+      alert(
+        `Неуспешно потпишување: ${err.response?.data?.message || "Системска грешка."}`,
+      );
+    } finally {
+      setSigningId(null);
     }
   };
 
@@ -274,8 +285,8 @@ export default function InvoicesListComponent() {
                 sx={{
                   borderRadius: "16px",
                   boxShadow:
-                    "0 10px 15px -3px rgba(15, 23, 42, 0.04), 0 4px 6px -4px rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(0, 0, 0, 0.05)",
-                  border: "1px solid #f1f5f9",
+                    "0 10px 15px -3px rgba(22, 47, 107, 0.04), 0 4px 6px -4px rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(0, 0, 0, 0.05)",
+                  border: "2px solid #91bfed",
                   position: "relative",
                   overflow: "hidden",
                   transition:
@@ -384,7 +395,6 @@ export default function InvoicesListComponent() {
                     </Typography>
                   </Box>
 
-                  {/* Податочна табела во грид */}
                   <Grid container spacing={2}>
                     <Grid size={{ xs: 6 }}>
                       <Box
@@ -440,12 +450,11 @@ export default function InvoicesListComponent() {
 
                   <Divider sx={{ my: 0.5, borderColor: "#f1f5f9" }} />
 
-                  {/* Испратено статус + Акциски икони */}
+                  {/* Статус + Акции */}
                   <Box
                     sx={{
                       display: "flex",
                       alignItems: "center",
-                      justifyValue: "space-between",
                       justifyContent: "space-between",
                     }}
                   >
@@ -494,8 +503,29 @@ export default function InvoicesListComponent() {
                       )}
                     </Box>
 
-                    {/* Брзи икони-копчиња */}
+                    {/* Брзи икони-копчиња (Мобилен) */}
                     <Box sx={{ display: "flex", gap: 0.5 }}>
+                      {/* Потпиши Копче */}
+                      <IconButton
+                        onClick={() =>
+                          handleSignInvoice(invoice.id, invoice.invoiceNo)
+                        }
+                        disabled={
+                          signingId !== null || invoice.status === "CANCELED"
+                        }
+                        size="small"
+                        sx={{ color: "#ea580c", backgroundColor: "#ffedd5" }}
+                      >
+                        {signingId === invoice.id ? (
+                          <CircularProgress
+                            size={16}
+                            sx={{ color: "#ea580c" }}
+                          />
+                        ) : (
+                          <DrawIcon fontSize="small" />
+                        )}
+                      </IconButton>
+
                       <IconButton
                         component={Link}
                         href={`/invoices/${invoice.id}/preview`}
@@ -689,6 +719,29 @@ export default function InvoicesListComponent() {
                           gap: 1,
                         }}
                       >
+                        {/* Потпиши / Фискализирај Копче */}
+                        <Button
+                          onClick={() =>
+                            handleSignInvoice(invoice.id, invoice.invoiceNo)
+                          }
+                          disabled={
+                            signingId !== null || invoice.status === "CANCELED"
+                          }
+                          variant="outlined"
+                          color="warning"
+                          size="small"
+                          startIcon={
+                            signingId === invoice.id ? (
+                              <CircularProgress size={16} color="inherit" />
+                            ) : (
+                              <DrawIcon />
+                            )
+                          }
+                          sx={{ borderRadius: "6px", textTransform: "none" }}
+                        >
+                          Потпиши
+                        </Button>
+
                         <Button
                           component={Link}
                           href={`/invoices/${invoice.id}/preview`}

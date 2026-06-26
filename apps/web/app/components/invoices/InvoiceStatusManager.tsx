@@ -27,7 +27,6 @@ export type InvoiceStatus =
   | "PROFORMA_PENDING"
   | "PROFORMA_PAID";
 
-// Дефиниција на поедноставен интерфејс за релациските документи што доаѓаат од BE
 interface RelatedInvoiceInfo {
   id: number;
   invoiceNo: number;
@@ -39,7 +38,6 @@ interface InvoiceStatusManagerProps {
   currentStatus: InvoiceStatus;
   dueDate: string;
   onStatusChangeSuccess?: (newStatus: InvoiceStatus) => void;
-  // НОВИ ПРОПС: Ги прифаќаме поврзаните објекти од табелата/деталите
   convertedFrom?: RelatedInvoiceInfo | null;
   convertedTo?: RelatedInvoiceInfo | null;
 }
@@ -69,7 +67,7 @@ const getStatusConfig = (status: InvoiceStatus) => {
     case "CONVERTED":
       return {
         label: "Конвертирана",
-        bgColor: "#f0fdf4", // малку позеленкаста нијанса бидејќи е успешно завршена работа
+        bgColor: "#f0fdf4",
         textColor: "#15803d",
       };
     default:
@@ -87,7 +85,6 @@ export default function InvoiceStatusManager({
 }: InvoiceStatusManagerProps) {
   const [status, setStatus] = useState<InvoiceStatus>(currentStatus);
   const [updating, setUpdating] = useState(false);
-  // Локална состојба за зачувување на новогенерираната фактура по конверзија на истата страница
   const [localConvertedTo, setLocalConvertedTo] =
     useState<RelatedInvoiceInfo | null>(convertedTo || null);
 
@@ -111,7 +108,6 @@ export default function InvoiceStatusManager({
 
     try {
       setUpdating(true);
-      // Претпоставуваме дека бекендот ја враќа новокреираната фактура { id, invoiceNo, year }
       const response = await api.post(`/invoices/${invoiceId}/convert`);
 
       if (response.data) {
@@ -167,8 +163,6 @@ export default function InvoiceStatusManager({
     }
   };
 
-  console.log(convertedFrom, convertedTo);
-
   return (
     <Box
       sx={{
@@ -178,20 +172,24 @@ export default function InvoiceStatusManager({
         width: "100%",
       }}
     >
-      {/* Го менуваме flexDirection од 'column' на 'row' во зависност од големината на екранот */}
       <Box
         sx={{
           display: "flex",
-          flexDirection: { xs: "column", sm: "row" }, // на мобилен (xs) ќе биде едно под друго, на десктоп (sm) во линија
-          alignItems: { xs: "stretch", sm: "center" }, // на мобилен ќе се рашират максимално
-          gap: 1.5,
+          flexDirection: { xs: "column", sm: "row" },
+          alignItems: { xs: "center", sm: "center" },
           width: "100%",
         }}
       >
         <Box sx={{ minWidth: { xs: "100%", sm: 160 } }}>
           {updating ? (
             <Box
-              sx={{ display: "flex", alignItems: "center", pl: 2, height: 24 }}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: { xs: "center", sm: "flex-start" },
+                pl: { xs: 0, sm: 2 },
+                height: 32,
+              }}
             >
               <CircularProgress size={18} sx={{ color: "#0070f3" }} />
             </Box>
@@ -215,7 +213,7 @@ export default function InvoiceStatusManager({
                         backgroundColor: config?.bgColor,
                         color: config?.textColor,
                         cursor: isLocked ? "not-allowed" : "pointer",
-                        width: { xs: "100%", sm: "auto" }, // Чипот да ја фати цела ширина на мобилен за поубав изглед
+                        width: "100%",
                         "& .MuiChip-label": {
                           px: 1.5,
                           width: "100%",
@@ -231,7 +229,7 @@ export default function InvoiceStatusManager({
                     paddingLeft: "4px",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: { xs: "center", sm: "flex-start" },
+                    justifyContent: "center",
                   },
                   "& .MuiSelect-icon": {
                     display: isLocked ? "none" : "block",
@@ -295,20 +293,37 @@ export default function InvoiceStatusManager({
           <Button
             variant="contained"
             size="small"
-            startIcon={<TransformIcon fontSize="small" />}
+            // Ја намалуваме големината на иконата за да биде пропорционална со помалото копче
+            startIcon={
+              <TransformIcon sx={{ fontSize: "0.75rem !important" }} />
+            }
             onClick={handleConvertProforma}
             sx={{
               backgroundColor: "#10b981",
               textTransform: "none",
               fontWeight: "600",
-              fontSize: "0.75rem",
-              py: 0.8, // малку поголем padding за полесно кликање на телефон
-              px: 1.5,
-              width: { xs: "100%", sm: "auto" }, // КЛУЧНО: На мобилен копчето ќе биде full-width и совршено видливо
+              fontSize: { xs: "0.7rem", sm: "0.75rem" },
+              py: { xs: 0.8, sm: 0.6 },
+              px: { xs: 1, sm: 1.5 },
+              width: "auto",
+              whiteSpace: "nowrap",
+              minHeight: "unset",
+              lineHeight: 1.2,
               "&:hover": { backgroundColor: "#059669" },
             }}
           >
-            Фактурирај (Генерирај Фактура)
+            <Box
+              component="span"
+              sx={{ display: { xs: "inline", sm: "none" } }}
+            >
+              Фактурирај
+            </Box>
+            <Box
+              component="span"
+              sx={{ display: { xs: "none", sm: "inline" } }}
+            >
+              Фактурирај (Генерирај Фактура)
+            </Box>
           </Button>
         )}
       </Box>
@@ -319,6 +334,7 @@ export default function InvoiceStatusManager({
           sx={{
             display: "flex",
             alignItems: "center",
+            justifyContent: { xs: "center", sm: "flex-start" },
             gap: 0.5,
             pl: 0.5,
             mt: 0.5,
@@ -347,6 +363,7 @@ export default function InvoiceStatusManager({
           sx={{
             display: "flex",
             alignItems: "center",
+            justifyContent: { xs: "center", sm: "flex-start" },
             gap: 0.5,
             pl: 0.5,
             mt: 0.5,

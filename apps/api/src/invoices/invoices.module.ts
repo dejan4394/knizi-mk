@@ -8,11 +8,13 @@ import { AuthModule } from '../auth/auth.module';
 import { Client } from 'src/clients/entities/client.entity';
 import { PdfModule } from 'src/pdf/pdf.module';
 import { InvoiceCronService } from './invoice-cron.service';
+import { KibsModule } from 'src/kibs/kibs.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Invoice, InvoiceItem, AuthModule, Client]),
     PdfModule,
+    KibsModule,
   ],
   controllers: [InvoicesController],
   providers: [InvoicesService, InvoiceCronService],

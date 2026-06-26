@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import Sidebar from "../components/Sidebar";
+import { useAuth } from "../context/AuthContext";
 
 export default function DashboardLayout({
   children,
@@ -18,6 +19,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -45,18 +47,51 @@ export default function DashboardLayout({
           >
             <MenuIcon />
           </IconButton>
-          <Typography
-            variant="h6"
-            noWrap
-            component="div"
-            sx={{ fontWeight: "bold" }}
+
+          {/* Вертикален контејнер што ги реди насловот и компанијата едно под друго */}
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            }}
           >
-            Книжи.мк
-          </Typography>
+            <Typography
+              variant="h6"
+              noWrap
+              component="div"
+              sx={{
+                fontWeight: "bold",
+                lineHeight: 1.2, // Го намалуваме за да нема преголем празен простор меѓу нив
+              }}
+            >
+              Книжи.мк
+            </Typography>
+
+            {/* Името на компанијата како поднаслов */}
+            {user?.companyName && (
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  color: "#38bdf8", // Светло сина брендирана боја
+                  fontWeight: "500",
+                  fontSize: "11px",
+                  lineHeight: 1.2,
+                  mt: 0.2, // Мало растојание од главниот наслов
+                  maxWidth: "180px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {user.companyName}
+              </Typography>
+            )}
+          </Box>
         </Toolbar>
       </AppBar>
 
-      {/* 2. СЛАТКА МУИ МАГИЈА ЗА САЈДБАРОТ */}
+      {/* Сајдбар навигација */}
       <Box
         component="nav"
         sx={{ width: { md: sidebarWidth }, flexShrink: { md: 0 } }}

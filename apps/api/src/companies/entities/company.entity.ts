@@ -42,12 +42,18 @@ export class Company extends Base {
   @Column({ nullable: true, select: false })
   smtpPass?: string;
 
-  @OneToMany(() => Invoice, (invoice) => invoice.company)
+  @Column({ nullable: true })
+  kibsProfileId?: string;
+
+  @Column({ nullable: true })
+  companyOneId?: string;
+
+  @OneToMany(() => Invoice, (invoice: Invoice) => invoice.company)
   invoices!: Invoice[];
 
-  @OneToMany(() => User, (user) => user.company)
+  @OneToMany(() => User, (user: User) => user.company)
   users!: User[];
 
-  @OneToMany(() => Client, (client) => client.company)
+  @OneToMany(() => Client, (client: Client) => client.company)
   clients!: Client[];
 }

@@ -19,7 +19,6 @@ export class CompaniesService {
     }
     return company;
   }
-
   async updateCompanyDetails(companyId: number, dto: any): Promise<Company> {
     let company = await this.companyRepository.findOne({
       where: { id: companyId },
@@ -36,15 +35,13 @@ export class CompaniesService {
         bankName: dto.bankName,
         phone: dto.phone,
         email: dto.email,
-
-        // ДОДАДЕНО: Зачувување на Base64 логото при креирање
         logoUrl: dto.logoUrl || null,
-
-        // Додаваме SMTP вредности при креирање
         smtpHost: dto.smtpHost || null,
         smtpPort: dto.smtpPort ? Number(dto.smtpPort) : 465,
         smtpUser: dto.smtpUser || null,
-        smtpPass: dto.smtpPass || null, // Може да биде null ако првично не внесуваат ништо
+        smtpPass: dto.smtpPass || null,
+        companyOneId: dto.companyOneId || null,
+        kibsProfileId: dto.kibsProfileId || null,
       });
     } else {
       // 2. Ажурирање на постоечка фирма
@@ -59,6 +56,8 @@ export class CompaniesService {
       company.smtpHost = dto.smtpHost || null;
       company.smtpPort = dto.smtpPort ? Number(dto.smtpPort) : 465;
       company.smtpUser = dto.smtpUser || null;
+      company.companyOneId = dto.companyOneId || null;
+      company.kibsProfileId = dto.kibsProfileId || null;
 
       // БЕЗБЕДНОСНА ПРОВЕРКА ЗА ЛОЗИНКАТА:
       // Ја ажурираме во базата САМО ако корисникот реално внел нешто на фронтендот.

@@ -158,4 +158,14 @@ export class InvoicesController {
 
     return { nextInvoiceNumber: nextNo };
   }
+
+  @Post(':id/sign')
+  async signInvoice(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const companyId = req.user?.companyId || 1;
+
+    return await this.invoicesService.signInvoiceWithKibs(id, companyId);
+  }
 }

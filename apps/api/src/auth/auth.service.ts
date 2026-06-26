@@ -48,7 +48,15 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.userRepo.findOne({ where: { email: dto.email } });
+    const user = await this.userRepo.findOne({
+      where: { email: dto.email },
+      relations: { company: true },
+      select: {
+        company: {
+          name: true,
+        },
+      },
+    });
     if (!user) throw new UnauthorizedException('Невалидни кредиенцијали.');
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
@@ -64,6 +72,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       companyId: user.companyId,
+      // companyName: user.company.name,
     };
     return {
       accessToken: this.jwtService.sign(payload),
@@ -73,6 +82,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         companyId: user.companyId,
+        companyName: user.company.name,
       },
     };
   }

@@ -69,6 +69,8 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
+  console.log(user);
+
   if (!user) return null;
 
   return (
@@ -97,11 +99,33 @@ export default function Sidebar() {
             variant="h5"
             sx={{ fontWeight: "bold", color: "#38bdf8" }}
           >
-            книжи.мк
+            Книжи.мк
           </Typography>
+
+          {/* Името на компанијата директно од user објектот */}
+          {user.companyName && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: "#38bdf8", // Се совпаѓа со сината боја од логото
+                display: "block",
+                mt: 0.2,
+                fontSize: "11px",
+                fontWeight: "medium",
+              }}
+            >
+              {user.companyName}
+            </Typography>
+          )}
+          {/* Име на корисникот и улога */}
           <Typography
             variant="caption"
-            sx={{ color: "#94a3b8", display: "block", mt: 0.5 }}
+            sx={{
+              color: "#94a3b8",
+              display: "block",
+              mt: 0.5,
+              fontWeight: "500",
+            }}
           >
             {user.firstName} ({user.role})
           </Typography>

@@ -9,6 +9,7 @@ interface User {
   email: string;
   role: "OWNER" | "EMPLOYEE" | "VIEWER";
   companyId: number;
+  companyName: string;
 }
 
 interface AuthContextType {

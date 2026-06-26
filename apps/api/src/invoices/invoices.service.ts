@@ -17,6 +17,7 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import * as nodemailer from 'nodemailer';
 import { PdfService } from 'src/pdf/pdf.service';
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { KibsService } from 'src/kibs/kibs.service';
 
 @Injectable()
 export class InvoicesService {
@@ -29,6 +30,7 @@ export class InvoicesService {
     private readonly clientRepository: Repository<Client>,
     private readonly pdfService: PdfService,
     private readonly dataSource: DataSource,
+    private readonly kibsService: KibsService,
   ) {}
 
   async create(
@@ -448,7 +450,7 @@ export class InvoicesService {
     }
   }
 
-  public mapInvoiceToTemplateData(dbInvoice: any): any {
+  public mapInvoiceToTemplateData(dbInvoice: Invoice): any {
     return {
       documentType: dbInvoice.documentType,
       status: dbInvoice.status,
@@ -470,7 +472,7 @@ export class InvoicesService {
         ? new Date(dbInvoice.dueDate).toLocaleDateString('mk-MK')
         : '',
 
-      items: (dbInvoice.items || []).map((item: any, index: number) => {
+      items: (dbInvoice.items || []).map((item: InvoiceItem, index: number) => {
         const quantity = Number(item.quantity);
         const price = Number(item.price);
         const discountPercent = Number(item.discountPercent ?? 0);
@@ -634,5 +636,61 @@ export class InvoicesService {
 
     const count = await this.invoiceRepository.count({ where: query });
     return count > 0;
+  }
+
+  async signInvoiceWithKibs(
+    invoiceId: number,
+    companyId: number,
+  ): Promise<any> {
+    // 1. Најди ја фактурата заедно со податоците за компанијата што ја издава
+    const invoice: Invoice | null = await this.invoiceRepository.findOne({
+      where: { id: invoiceId, company: { id: companyId } },
+      relations: ['company'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(
+        `Фактурата со ID ${invoiceId} не е пронајдена.`,
+      );
+    }
+
+    // 2. Безбедносна проверка: Фактурата мора да биде UNPAID (или во состојба пред да биде потпишана)
+    if (invoice.status !== InvoiceStatus.UNPAID) {
+      throw new BadRequestException(
+        'Може да се потпишуваат само неплатени (UNPAID) фактури.',
+      );
+    }
+
+    const company = invoice.company;
+
+    // 3. Проверка дали корисникот воопшто има внесен OneID во својот профил
+    if (!company.companyOneId) {
+      throw new BadRequestException(
+        'Не можете да потпишете! Ве молиме прво внесете го вашиот OneID идентификатор во поставките на компанијата.',
+      );
+    }
+
+    const invoiceDataForTemplate = this.mapInvoiceToTemplateData(invoice);
+
+    const pdfBuffer = await this.pdfService.generateInvoicePdf(
+      invoiceDataForTemplate,
+    );
+
+    // 5. Повикај го КИБС сервисот кој го подготвивме за да ја иницира трансакцијата
+    const kibsResponse = await this.kibsService.initiateDocumentSigning(
+      pdfBuffer,
+      company.companyOneId,
+      invoice.invoiceNo, // Твоето поле за број на фактура (на пр. 12/2026)
+    );
+
+    // 6. Овде во базата можеш да зачуваш некое привремено ID на трансакцијата ако КИБС го враќа (requestId)
+    // invoice.kibsRequestId = kibsResponse.requestId;
+    // await this.invoiceRepository.save(invoice);
+
+    return {
+      message:
+        'Барањето за дигитален потпис е успешно испратено. Проверете ја OneID апликацијата на вашиот телефон.',
+      kibsData: kibsResponse,
+    };
   }
 }

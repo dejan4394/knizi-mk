@@ -43,7 +43,7 @@ export class UsersController {
       );
     }
 
-    const companyId = req.user?.companyId || 1;
+    const companyId = req.user?.companyId;
     return await this.usersService.createSubUser(companyId, dto);
   }
 
@@ -59,7 +59,8 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.OWNER)
   async deleteUser(@Param('id') id: number, @Req() req: AuthenticatedRequest) {
-    return this.usersService.deleteSubUser(req.user.companyId, id);
+    return this.usersService.deleteSubUser(req.user.companyId, Number(id));
   }
 }

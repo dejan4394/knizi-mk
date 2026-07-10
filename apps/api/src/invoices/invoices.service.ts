@@ -262,8 +262,14 @@ export class InvoicesService {
     return this.invoiceRepository.save(invoice);
   }
 
-  async updateStatus(id: number, nextStatus: InvoiceStatus): Promise<Invoice> {
-    const invoice = await this.invoiceRepository.findOne({ where: { id } });
+  async updateStatus(
+    id: number,
+    nextStatus: InvoiceStatus,
+    companyId: number,
+  ): Promise<Invoice> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id, companyId },
+    });
 
     if (!invoice) {
       throw new NotFoundException(`Фактурата со ID ${id} не е пронајдена.`);
@@ -281,6 +287,7 @@ export class InvoicesService {
 
   async sendInvoiceToEmail(
     id: number,
+    companyId: number,
   ): Promise<{ success: boolean; message: string }> {
     const invoice = await this.invoiceRepository
       .createQueryBuilder('invoice')
@@ -289,6 +296,7 @@ export class InvoicesService {
       .addSelect('company.smtpPass')
       .leftJoinAndSelect('invoice.items', 'items')
       .where('invoice.id = :id', { id })
+      .andWhere('invoice.companyId = :companyId', { companyId })
       .getOne();
 
     if (!invoice)

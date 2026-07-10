@@ -9,12 +9,14 @@ import {
   Patch,
   Param,
   Req,
+  Delete,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service'; // Увези го UsersService
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from './enums/user.enum';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import type { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -54,5 +56,10 @@ export class UsersController {
   ) {
     const companyId = req.user.companyId;
     return this.usersService.updateSubUser(companyId, Number(userId), body);
+  }
+
+  @Delete(':id')
+  async deleteUser(@Param('id') id: number, @Req() req: AuthenticatedRequest) {
+    return this.usersService.deleteSubUser(req.user.companyId, id);
   }
 }

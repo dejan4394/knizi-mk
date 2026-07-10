@@ -27,23 +27,28 @@ import {
 import GroupIcon from "@mui/icons-material/Group";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete"; // Икона за бришење
+import LockResetIcon from "@mui/icons-material/LockReset";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import InputAdornment from "@mui/material/InputAdornment";
 import { useAuth } from "../../../context/AuthContext";
 
 export default function CompanyUsersPage() {
-  // 1. Земи ја улогата на логираниот корисник (пример од твојот Auth систем)
   const { user } = useAuth();
+  const isOwner = user?.role === "OWNER";
 
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
-  const [openUserModal, setOpenUserModal] = useState<boolean>(false);
 
-  // Состојба за да знаеме дали креираме нов или едитираме постоечки корисник
+  // Модали states
+  const [openUserModal, setOpenUserModal] = useState<boolean>(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState<boolean>(false);
+
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [userToDelete, setUserToDelete] = useState<any | null>(null);
 
   const [newUser, setNewUser] = useState({
     firstName: "",
@@ -55,6 +60,7 @@ export default function CompanyUsersPage() {
 
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
+  // --- Влечење на тимот ---
   const fetchCompanyUsers = async () => {
     try {
       setLoading(true);
@@ -71,6 +77,7 @@ export default function CompanyUsersPage() {
     fetchCompanyUsers();
   }, []);
 
+  // --- Отворање модал за Креирање ---
   const handleOpenCreateModal = () => {
     setIsEditMode(false);
     setSelectedUserId(null);
@@ -85,36 +92,41 @@ export default function CompanyUsersPage() {
     setOpenUserModal(true);
   };
 
-  // Функција за отворање на модалот во режим на едитирање
-  const handleOpenEditModal = (user: any) => {
+  // --- Отворање модал за Едитирање + Лозинка ---
+  const handleOpenEditModal = (targetUser: any) => {
     setIsEditMode(true);
-    setSelectedUserId(user.id);
+    setSelectedUserId(targetUser.id);
+    setShowPassword(false);
     setNewUser({
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      password: "", // Лозинката ја оставаме празна при едитирање
-      role: user.role,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+      email: targetUser.email,
+      password: "", // Ја оставаме празна, ако внесе нешто сопственикот ќе се смени
+      role: targetUser.role,
     });
     setOpenUserModal(true);
   };
 
+  // --- Справување со Зачувување / Ажурирање ---
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setSaving(true);
 
       if (isEditMode && selectedUserId) {
-        // Изземање на е-пошта и лозинка ако не се менуваат на оваа PATCH рута
-        const { email, password, ...updateData } = newUser;
+        // Го тргаме само password од деструктурирањето, го оставаме email да оди во updateData
+        const { password, ...updateData } = newUser;
 
-        // Ако сепак сакаш да дозволиш менување лозинка, може да го додадеш пак овој услов:
-        // if (password.trim() !== "") { (updateData as any).password = password; }
+        const payload: any = { ...updateData };
 
-        await api.patch(`/users/${selectedUserId}`, updateData);
+        // Ако OWNER-от внел и нова лозинка, ја додаваме и неа
+        if (password.trim() !== "") {
+          payload.password = password;
+        }
+
+        await api.patch(`/users/${selectedUserId}`, payload);
         alert("Корисничкиот профил е успешно ажуриран!");
       } else {
-        // Креирање на нов корисник
         await api.post("/users", newUser);
         alert("Корисникот е успешно додаден во вашиот тим!");
       }
@@ -123,6 +135,32 @@ export default function CompanyUsersPage() {
       fetchCompanyUsers();
     } catch (err: any) {
       alert(`Грешка: ${err.response?.data?.message || "Неуспешна акција."}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // --- Справување со Бришење ---
+  const handleOpenDeleteDialog = (targetUser: any) => {
+    setUserToDelete(targetUser);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    try {
+      setSaving(true);
+      await api.delete(`/users/${userToDelete.id}`);
+      alert(
+        `Корисникот ${userToDelete.firstName} е успешно отстранет од тимот.`,
+      );
+      setOpenDeleteDialog(false);
+      setUserToDelete(null);
+      fetchCompanyUsers();
+    } catch (err: any) {
+      alert(
+        `Грешка при бришење: ${err.response?.data?.message || "Неуспешна акција."}`,
+      );
     } finally {
       setSaving(false);
     }
@@ -144,9 +182,9 @@ export default function CompanyUsersPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: "1000px", margin: "0 auto" }}>
+    <Box sx={{ maxWidth: "1000px", margin: "0 auto", px: 2 }}>
       {/* Хедер */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 4 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 4, mt: 2 }}>
         <GroupIcon sx={{ fontSize: 40, color: "#0070f3" }} />
         <Box>
           <Typography
@@ -174,13 +212,14 @@ export default function CompanyUsersPage() {
         <Typography variant="h6" sx={{ fontWeight: "bold" }}>
           Вработени во компанијата
         </Typography>
-        {user?.role === "OWNER" && (
+        {isOwner && (
           <Button
             variant="contained"
             startIcon={<PersonAddIcon />}
             onClick={handleOpenCreateModal}
             sx={{
-              backgroundColor: "#0f172a",
+              backgroundColor: "#0070f3",
+              "&:hover": { backgroundColor: "#0051b3" },
               textTransform: "none",
               borderRadius: "8px",
               px: 3,
@@ -191,7 +230,7 @@ export default function CompanyUsersPage() {
         )}
       </Box>
 
-      {/* Табела со посебни колони */}
+      {/* Табела со тимот */}
       <TableContainer
         component={Paper}
         sx={{
@@ -214,7 +253,7 @@ export default function CompanyUsersPage() {
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
                   Немате додадено под-корисници.
                 </TableCell>
               </TableRow>
@@ -256,14 +295,37 @@ export default function CompanyUsersPage() {
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
-                    {/* Копче за едитирање - Оневозможено ако е OWNER за да се заштити главниот акаунт */}
-                    <IconButton
-                      color="primary"
-                      onClick={() => handleOpenEditModal(u)}
-                      disabled={u.role === "OWNER"}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
+                    {/* Акциите се дозволени само за OWNER и тоа врз други улоги (не врз друг OWNER) */}
+                    {isOwner && u.role !== "OWNER" ? (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "center",
+                          gap: 0.5,
+                        }}
+                      >
+                        <IconButton
+                          color="primary"
+                          size="small"
+                          onClick={() => handleOpenEditModal(u)}
+                          title="Уреди профил и лозинка"
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          color="error"
+                          size="small"
+                          onClick={() => handleOpenDeleteDialog(u)}
+                          title="Избриши корисник"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ) : (
+                      <Typography variant="caption" color="textSecondary">
+                        —
+                      </Typography>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -309,13 +371,13 @@ export default function CompanyUsersPage() {
                   }
                 />
               </Grid>
-              <Grid size={{ xs: 12 }}>
+              <Grid size={{ xs: 6 }}>
                 <TextField
                   label="Е-пошта"
                   type="email"
                   fullWidth
                   required
-                  disabled={isEditMode}
+                  // disabled={isEditMode} // Е-маилот не се менува при едитирање
                   value={newUser.email}
                   onChange={(e) =>
                     setNewUser({ ...newUser, email: e.target.value })
@@ -324,41 +386,45 @@ export default function CompanyUsersPage() {
                 />
               </Grid>
 
-              {!isEditMode && (
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    label="Привремена лозинка"
-                    // Динамично го менуваме типот: ако showPassword е true оди во "text", во спротивно е "password"
-                    type={showPassword ? "text" : "password"}
-                    fullWidth
-                    required
-                    value={newUser.password}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, password: e.target.value })
-                    }
-                    slotProps={{
-                      htmlInput: { autoComplete: "new-password" },
-                      // Го додаваме окото како додаток на крајот од инпутот (End Adornment)
-                      input: {
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              onClick={() => setShowPassword(!showPassword)}
-                              edge="end"
-                            >
-                              {showPassword ? (
-                                <VisibilityOff />
-                              ) : (
-                                <Visibility />
-                              )}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                </Grid>
-              )}
+              {/* Поле за Лозинка - Присутно секогаш, но со различна улога при Едит */}
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  label={
+                    isEditMode
+                      ? "Нова лозинка (остави празно ако не менуваш)"
+                      : "Привремена лозинка"
+                  }
+                  type={showPassword ? "text" : "password"}
+                  fullWidth
+                  required={!isEditMode} // Задолжително само при креирање нов корисник
+                  value={newUser.password}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, password: e.target.value })
+                  }
+                  slotProps={{
+                    htmlInput: { autoComplete: "new-password" },
+                    input: {
+                      startAdornment: isEditMode ? (
+                        <InputAdornment position="start">
+                          <LockResetIcon
+                            sx={{ color: "warning.main", mr: 0.5 }}
+                          />
+                        </InputAdornment>
+                      ) : undefined,
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword(!showPassword)}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+              </Grid>
 
               <Grid size={{ xs: 12 }}>
                 <TextField
@@ -393,6 +459,7 @@ export default function CompanyUsersPage() {
               disabled={saving}
               sx={{
                 backgroundColor: "#0070f3",
+                "&:hover": { backgroundColor: "#0051b3" },
                 textTransform: "none",
                 fontWeight: "bold",
               }}
@@ -405,6 +472,43 @@ export default function CompanyUsersPage() {
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      {/* ДИЈАЛОГ ЗА ПОТВРДА ПРИ БРИШЕЊЕ КОРИСНИК */}
+      <Dialog
+        open={openDeleteDialog}
+        onClose={() => setOpenDeleteDialog(false)}
+      >
+        <DialogTitle sx={{ fontWeight: "bold" }}>
+          Предупредување за бришење
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            Дали сте сигурни дека сакате трајно да го отстраните корисникот{" "}
+            <strong>
+              {userToDelete?.firstName} {userToDelete?.lastName}
+            </strong>{" "}
+            ({userToDelete?.email}) од вашиот тим? Оваа акција не може да се
+            врати.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setOpenDeleteDialog(false)}
+            sx={{ textTransform: "none", color: "gray" }}
+          >
+            Откажи
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            variant="contained"
+            color="error"
+            disabled={saving}
+            sx={{ textTransform: "none", fontWeight: "bold" }}
+          >
+            {saving ? "Се брише..." : "Да, избриши го"}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

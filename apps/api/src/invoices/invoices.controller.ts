@@ -9,6 +9,7 @@ import {
   Res,
   Patch,
   ParseIntPipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -53,8 +54,12 @@ export class InvoicesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.invoicesService.findOne(+id);
+  async findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    const invoice = await this.invoicesService.findOne(+id);
+    if (invoice.companyId !== req.user.companyId) {
+      throw new ForbiddenException('Немате овластување за овој документ.');
+    }
+    return invoice;
   }
 
   @Get(':id/pdf')
@@ -101,7 +106,7 @@ export class InvoicesController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
   async updateInvoice(
     @Param('id') id: string,
     @Body() updateInvoiceDto: UpdateInvoiceDto,
@@ -116,18 +121,26 @@ export class InvoicesController {
   }
 
   @Patch(':id/status')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateStatusDto: UpdateInvoiceStatusDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<Invoice> {
-    return await this.invoicesService.updateStatus(id, updateStatusDto.status);
+    return await this.invoicesService.updateStatus(
+      id,
+      updateStatusDto.status,
+      req.user.companyId,
+    );
   }
 
   @Post(':id/send-email')
-  @UseGuards(JwtAuthGuard)
-  async sendInvoiceEmail(@Param('id', ParseIntPipe) id: number) {
-    return await this.invoicesService.sendInvoiceToEmail(id);
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
+  async sendInvoiceEmail(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return await this.invoicesService.sendInvoiceToEmail(id, req.user.companyId);
   }
 
   @Post(':id/convert')
@@ -160,11 +173,12 @@ export class InvoicesController {
   }
 
   @Post(':id/sign')
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
   async signInvoice(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: AuthenticatedRequest,
   ) {
-    const companyId = req.user?.companyId || 1;
+    const companyId = req.user.companyId;
 
     return await this.invoicesService.signInvoiceWithKibs(id, companyId);
   }

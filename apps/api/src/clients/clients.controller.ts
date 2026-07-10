@@ -21,8 +21,11 @@ export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   @Post()
-  async create(@Body() createClientDto: Partial<Client>): Promise<Client> {
-    return await this.clientsService.create(createClientDto);
+  async create(
+    @Body() createClientDto: Partial<Client>,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<Client> {
+    return await this.clientsService.create(createClientDto, req.user.companyId);
   }
 
   @Get()
@@ -36,7 +39,8 @@ export class ClientsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateClientDto: Partial<Client>,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.clientsService.update(id, updateClientDto);
+    return this.clientsService.update(id, updateClientDto, req.user.companyId);
   }
 }

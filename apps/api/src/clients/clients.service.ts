@@ -15,10 +15,10 @@ export class ClientsService {
     private readonly clientRepository: Repository<Client>,
   ) {}
 
-  // 1. Креирање нов клиент со заштита од дупликат ЕДБ
-  async create(data: Partial<Client>): Promise<Client> {
+  // 1. Креирање нов клиент со заштита од дупликат ЕДБ (во рамките на компанијата)
+  async create(data: Partial<Client>, companyId: number): Promise<Client> {
     const existingClient = await this.clientRepository.findOne({
-      where: { edb: data.edb },
+      where: { edb: data.edb, companyId },
     });
     if (existingClient) {
       throw new ConflictException(
@@ -26,7 +26,8 @@ export class ClientsService {
       );
     }
 
-    const client = this.clientRepository.create(data);
+    // companyId се зема од токенот, не од телото на барањето
+    const client = this.clientRepository.create({ ...data, companyId });
     return await this.clientRepository.save(client);
   }
 
@@ -38,18 +39,24 @@ export class ClientsService {
     });
   }
 
-  async update(id: number, updateClientDto: Partial<Client>): Promise<Client> {
-    // 1. Провери дали клиентот со тоа ID воопшто постои во базата
-    const client = await this.clientRepository.findOne({ where: { id } });
+  async update(
+    id: number,
+    updateClientDto: Partial<Client>,
+    companyId: number,
+  ): Promise<Client> {
+    // 1. Провери дали клиентот со тоа ID постои и ѝ припаѓа на компанијата
+    const client = await this.clientRepository.findOne({
+      where: { id, companyId },
+    });
     if (!client) {
       throw new NotFoundException(`Клиентот со ID ${id} не е пронајден.`);
     }
 
     // 2. Безбедносна проверка за Единствен Даночен Број (ЕДБ)
-    // Ако се менува ЕДБ-то, провери да не веќе постои друга фирма со тој број
+    // Ако се менува ЕДБ-то, провери да не веќе постои друг комитент во оваа фирма со тој број
     if (updateClientDto.edb && updateClientDto.edb !== client.edb) {
       const edbExists = await this.clientRepository.findOne({
-        where: { edb: updateClientDto.edb },
+        where: { edb: updateClientDto.edb, companyId },
       });
       if (edbExists) {
         throw new BadRequestException(
@@ -58,7 +65,8 @@ export class ClientsService {
       }
     }
 
-    // 3. Спојување на новите податоци врз старите
+    // 3. Спојување на новите податоци врз старите (companyId не смее да се менува од телото)
+    delete updateClientDto.companyId;
     Object.assign(client, updateClientDto);
 
     // 4. Зачувување во базата на податоци

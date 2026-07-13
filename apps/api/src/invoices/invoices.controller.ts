@@ -17,6 +17,9 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/users/enums/user.enum';
+import { RequiresPlan } from 'src/billing/decorators/requires-plan.decorator';
+import { PlanGuard } from 'src/billing/guards/plan.guard';
+import { SubscriptionPlan } from 'src/billing/enums/plan.enum';
 import { PdfService } from 'src/pdf/pdf.service';
 import express from 'express';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -174,6 +177,8 @@ export class InvoicesController {
 
   @Post(':id/sign')
   @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
+  @RequiresPlan(SubscriptionPlan.PRO)
+  @UseGuards(PlanGuard)
   async signInvoice(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: AuthenticatedRequest,

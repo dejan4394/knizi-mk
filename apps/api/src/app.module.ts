@@ -9,6 +9,8 @@ import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
 import { PdfModule } from './pdf/pdf.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { BillingModule } from './billing/billing.module';
+import { UjpModule } from './ujp/ujp.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppDataSource } from './config/data-source'; // Го увезуваме новиот data-source
 
@@ -24,6 +26,8 @@ import { AppDataSource } from './config/data-source'; // Го увезуваме
     UsersModule,
     PdfModule,
     DashboardModule,
+    BillingModule,
+    UjpModule,
   ],
   controllers: [AppController],
   providers: [AppService],

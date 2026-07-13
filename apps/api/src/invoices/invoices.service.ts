@@ -1,16 +1,25 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository, Not } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  Repository,
+  Not,
+  FindOperator,
+} from 'typeorm';
 import {
   DocumentType,
   Invoice,
   InvoiceStatus,
 } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
+import { InvoiceUjpStatus } from '../ujp/entities/invoice-ujp-status.entity';
+import { UjpSubmissionStatus } from '../ujp/enums/ujp-submission-status.enum';
 import { Client } from '../clients/entities/client.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -28,10 +37,28 @@ export class InvoicesService {
     private readonly itemRepository: Repository<InvoiceItem>,
     @InjectRepository(Client)
     private readonly clientRepository: Repository<Client>,
+    @InjectRepository(InvoiceUjpStatus)
+    private readonly ujpStatusRepository: Repository<InvoiceUjpStatus>,
     private readonly pdfService: PdfService,
     private readonly dataSource: DataSource,
     private readonly kibsService: KibsService,
   ) {}
+
+  /**
+   * Спречува измени на фактура што е веќе одобрена од УЈП.
+   * По фискализација, документот е неизменлив — корекции се прават само со
+   * сторнирање (кредитно известување), не со едит.
+   */
+  private async assertNotFiscallyLocked(invoiceId: number): Promise<void> {
+    const ujp = await this.ujpStatusRepository.findOne({
+      where: { invoiceId },
+    });
+    if (ujp && ujp.status === UjpSubmissionStatus.APPROVED) {
+      throw new BadRequestException(
+        'Фактурата е одобрена од УЈП и е заклучена. Корекции се прават само со сторнирање.',
+      );
+    }
+  }
 
   async create(
     createInvoiceDto: CreateInvoiceDto,
@@ -172,6 +199,9 @@ export class InvoicesService {
     if (!invoice) {
       throw new NotFoundException(`Фактурата со ID ${id} не е пронајдена.`);
     }
+
+    // Заклучување по фискализација: одобрена од УЈП фактура е неизменлива.
+    await this.assertNotFiscallyLocked(id);
 
     // Подготовка на вредности за проверка на уникатност при едит
     const checkNo = invoiceNo ? Number(invoiceNo) : invoice.invoiceNo;
@@ -631,7 +661,13 @@ export class InvoicesService {
     documentType: DocumentType,
     excludeInvoiceId?: number,
   ): Promise<boolean> {
-    const query: any = {
+    const query: {
+      id?: FindOperator<number>;
+      companyId: number;
+      invoiceNo: number;
+      year: number;
+      documentType: DocumentType;
+    } = {
       companyId,
       invoiceNo: invoiceNumber,
       year: year,

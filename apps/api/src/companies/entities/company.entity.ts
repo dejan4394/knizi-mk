@@ -3,6 +3,7 @@ import { Invoice } from '../../invoices/entities/invoice.entity';
 import { Base } from '../../invoices/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Client } from '../../clients/entities/client.entity';
+import { SubscriptionPlan } from '../../billing/enums/plan.enum';
 
 @Entity('companies')
 export class Company extends Base {
@@ -47,6 +48,37 @@ export class Company extends Base {
 
   @Column({ nullable: true })
   companyOneId?: string;
+
+  // --- Претплата / Billing ---
+  @Column({
+    type: 'enum',
+    enum: SubscriptionPlan,
+    default: SubscriptionPlan.FREE,
+  })
+  plan!: SubscriptionPlan;
+
+  // Кога е активиран тековниот план.
+  @Column({ type: 'timestamptz', nullable: true })
+  planStartedAt?: Date | null;
+
+  // Кога истекува платениот циклус (само за PRO). null = без истек (FREE).
+  @Column({ type: 'timestamptz', nullable: true })
+  planExpiresAt?: Date | null;
+
+  // --- Токен за автоматска наплата (Stopanska banka) ---
+  // Токен добиен по успешна иницијална токенизација на картичката. Со него
+  // cron-от прави автоматски месечни наплати. Чувствителен - `select: false`,
+  // се вчитува само експлицитно кога навистина ни треба.
+  @Column({ type: 'varchar', nullable: true, select: false })
+  paymentToken?: string | null;
+
+  // Бренд на зачуваната картичка (VISA/MASTERCARD/...) за приказ.
+  @Column({ type: 'varchar', nullable: true })
+  paymentCardBrand?: string | null;
+
+  // Последни 4 цифри од картичката за приказ (пр. **** 4242).
+  @Column({ type: 'varchar', nullable: true })
+  paymentCardLast4?: string | null;
 
   @OneToMany(() => Invoice, (invoice: Invoice) => invoice.company)
   invoices!: Invoice[];

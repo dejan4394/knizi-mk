@@ -26,6 +26,7 @@ import PeopleIcon from "@mui/icons-material/People";
 import BadgeIcon from "@mui/icons-material/Badge";
 import LogoutIcon from "@mui/icons-material/Logout";
 import BusinessIcon from "@mui/icons-material/Business";
+import CreditCardIcon from "@mui/icons-material/CreditCard";
 
 interface MenuItem {
   title: string;
@@ -62,6 +63,12 @@ const MENU_ITEMS: MenuItem[] = [
     path: "/settings/users",
     icon: <BadgeIcon />,
     allowedRoles: ["OWNER"], // Прикажи само за сопственик
+  },
+  {
+    title: "Претплата",
+    path: "/settings/billing",
+    icon: <CreditCardIcon />,
+    allowedRoles: ["OWNER"], // Само сопственикот менува претплата
   },
 ];
 

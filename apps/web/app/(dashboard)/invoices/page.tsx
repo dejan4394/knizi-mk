@@ -38,6 +38,7 @@ import DrawIcon from "@mui/icons-material/Draw"; // Икона за потпиш
 import InvoiceStatusManager, {
   InvoiceStatus,
 } from "../../components/invoices/InvoiceStatusManager";
+import UjpStatusChip from "../../components/invoices/UjpStatusChip";
 import api from "../../utils/services/api";
 
 // --- Типови ---
@@ -381,6 +382,20 @@ export default function InvoicesListComponent() {
                     <Typography
                       variant="caption"
                       color="textSecondary"
+                      sx={{ display: "block", mb: 0.5, fontWeight: "500" }}
+                    >
+                      е-Фактура (УЈП)
+                    </Typography>
+                    <UjpStatusChip
+                      invoiceId={invoice.id}
+                      invoiceStatus={invoice.status}
+                    />
+                  </Box>
+
+                  <Box>
+                    <Typography
+                      variant="caption"
+                      color="textSecondary"
                       sx={{ display: "block", mb: 0.2, fontWeight: "500" }}
                     >
                       Клиент
@@ -606,6 +621,7 @@ export default function InvoicesListComponent() {
               <TableCell sx={{ fontWeight: "700" }}>Рок за плаќање</TableCell>
               <TableCell sx={{ fontWeight: "700" }}>Вкупна сума</TableCell>
               <TableCell sx={{ fontWeight: "700" }}>Статус</TableCell>
+              <TableCell sx={{ fontWeight: "700" }}>УЈП</TableCell>
               <TableCell sx={{ fontWeight: "700" }}>Е-пошта</TableCell>
               <TableCell align="right" sx={{ fontWeight: "700", pr: 3 }}>
                 Акции
@@ -616,7 +632,7 @@ export default function InvoicesListComponent() {
             {filteredInvoices.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   align="center"
                   sx={{ py: 4, color: "text.secondary" }}
                 >
@@ -670,6 +686,12 @@ export default function InvoicesListComponent() {
                               }
                             : undefined
                         }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <UjpStatusChip
+                        invoiceId={invoice.id}
+                        invoiceStatus={invoice.status}
                       />
                     </TableCell>
                     <TableCell>

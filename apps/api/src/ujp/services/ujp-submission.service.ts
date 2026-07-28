@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -9,33 +11,36 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Invoice } from '../../invoices/entities/invoice.entity';
-import { InvoicesService } from '../../invoices/invoices.service';
-import { PdfService } from '../../pdf/pdf.service';
 import { InvoiceUjpStatus } from '../entities/invoice-ujp-status.entity';
 import {
   MAX_UJP_ATTEMPTS,
   TERMINAL_UJP_STATUSES,
   UjpSubmissionStatus,
 } from '../enums/ujp-submission-status.enum';
-import { UjpAckKind } from '../dto/ujp-payload.types';
+import {
+  UjpCompanyInfo,
+  UjpEnvelope,
+  UjpSendOutcome,
+  UjpSubmitContext,
+} from '../dto/ujp-payload.types';
 import { UjpInvoiceAdapterService } from './ujp-invoice-adapter.service';
 import {
   UjpBusinessRejectionError,
   UjpClientService,
 } from './ujp-client.service';
 import { SIGNING_PROVIDER } from '../signing/signing-provider.interface';
-import type { SigningProvider } from '../signing/signing-provider.interface';
+import type { JwsSigningProvider } from '../signing/signing-provider.interface';
 
 /**
  * Оркестратор на поднесувањето кон УЈП.
  *
  * Модел на сигурност (без Redis/BullMQ):
- *  1. `enqueue` создава/ресетира outbox запис во статус QUEUED.
- *  2. Веднаш (без блокирање на корисникот) се обидуваме да обработиме.
- *  3. `UjpReconcilerCron` е безбедносна мрежа што ги фаќа заглавените записи.
+ *  1. `enqueue` создава/ресетира outbox запис (QUEUED).
+ *  2. Веднаш се обидуваме да обработиме, во позадина (без блокирање на корисникот).
+ *  3. `UjpReconcilerCron` ги фаќа заглавените записи (крашеви, привремени грешки).
  *
- * Кога ќе се додаде вистински queue (pg-boss/BullMQ), само `enqueue` наместо
- * `void this.process(...)` ќе става job — сè друго останува исто.
+ * Поднесувањето е СИНХРОНО: adapter → потпис (JWS) → send → веднаш добиваме EUID.
+ * Успешно пратена и валидирана фактура се смета за фискализирана (заклучена).
  */
 @Injectable()
 export class UjpSubmissionService {
@@ -48,13 +53,10 @@ export class UjpSubmissionService {
     private readonly invoiceRepo: Repository<Invoice>,
     private readonly adapter: UjpInvoiceAdapterService,
     private readonly ujpClient: UjpClientService,
-    private readonly invoicesService: InvoicesService,
-    private readonly pdfService: PdfService,
     @Inject(SIGNING_PROVIDER)
-    private readonly signingProvider: SigningProvider,
+    private readonly signer: JwsSigningProvider,
   ) {}
 
-  /** Читање-модел за фронтендот. */
   async getForInvoice(
     invoiceId: number,
     companyId: number,
@@ -62,9 +64,13 @@ export class UjpSubmissionService {
     return this.statusRepo.findOne({ where: { invoiceId, companyId } });
   }
 
+  /** Официјални податоци за компанија по даночен број (автопополнување). */
+  async lookupCompany(taxNumber: string): Promise<UjpCompanyInfo> {
+    return this.ujpClient.getCompanyByTaxNumber(taxNumber);
+  }
+
   /**
-   * Става фактура во ред за поднесување (outbox) и веднаш се обидува да ја обработи.
-   * Враќа брзо — обработката тече во позадина за да не се блокира корисникот.
+   * Става фактура во ред за поднесување (outbox) и веднаш обработува во позадина.
    */
   async enqueue(
     invoiceId: number,
@@ -77,20 +83,20 @@ export class UjpSubmissionService {
       throw new NotFoundException('Фактурата не е пронајдена.');
     }
 
-    let row = await this.statusRepo.findOne({ where: { invoiceId, companyId } });
+    let row = await this.statusRepo.findOne({
+      where: { invoiceId, companyId },
+    });
 
     if (row && row.status === UjpSubmissionStatus.APPROVED) {
       throw new ConflictException(
-        'Фактурата е веќе одобрена од УЈП и не може повторно да се поднесе.',
+        'Фактурата е веќе поднесена и валидирана од УЈП.',
       );
     }
 
-    // Ако веќе тече обработка, врати го постоечкиот запис (идемпотентно).
     const inFlight: UjpSubmissionStatus[] = [
       UjpSubmissionStatus.QUEUED,
       UjpSubmissionStatus.SIGNING,
       UjpSubmissionStatus.SUBMITTING,
-      UjpSubmissionStatus.AWAITING_CONFIRMATION,
     ];
     if (row && inFlight.includes(row.status)) {
       return row;
@@ -109,31 +115,19 @@ export class UjpSubmissionService {
     row.rejectionReason = null;
     row = await this.statusRepo.save(row);
 
-    // Позадинска обработка; грешките се фаќаат внатре и се снимаат во записот.
     void this.process(row.id).catch((err) =>
       this.logger.error(
-        `Непредвидена грешка при обработка на УЈП запис ${row!.id}: ${err}`,
+        `Непредвидена грешка при обработка на УЈП запис ${row.id}: ${err}`,
       ),
     );
 
     return row;
   }
 
-  /**
-   * Целосна обработка на еден запис: потпиши → поднеси → сними резултат.
-   * Наменето да го повикуваат и `enqueue` и reconciler-от.
-   */
+  /** Целосна синхрона обработка: adapter → JWS → send → сними EUID/статус. */
   async process(statusId: number): Promise<void> {
     const row = await this.statusRepo.findOne({ where: { id: statusId } });
-    if (!row) return;
-
-    // Асинхроно поднесените се проверуваат преку poll, не се праќаат повторно.
-    if (row.status === UjpSubmissionStatus.AWAITING_CONFIRMATION) {
-      await this.pollAwaiting(row);
-      return;
-    }
-
-    if (TERMINAL_UJP_STATUSES.has(row.status)) return;
+    if (!row || TERMINAL_UJP_STATUSES.has(row.status)) return;
 
     const invoice = await this.invoiceRepo.findOne({
       where: { id: row.invoiceId },
@@ -145,76 +139,59 @@ export class UjpSubmissionService {
     }
 
     try {
-      // 1) Потпиши
-      row.status = UjpSubmissionStatus.SIGNING;
       row.attempts += 1;
+
+      // docTypeCode: 100 = Фактура (проформи не се фискализираат преку овој сервис).
+      const docTypeCode = '100';
+
+      // 1) Серверско време → requestTimestamp (±5 мин; дел од потписот).
+      const requestTimestamp = await this.ujpClient.getServerTime();
+
+      // 2) Изгради payload и потпиши го како JWS.
+      row.status = UjpSubmissionStatus.SIGNING;
       await this.statusRepo.save(row);
 
-      const payload = this.adapter.toUjpPayload(invoice);
-      const templateData = this.invoicesService.mapInvoiceToTemplateData(invoice);
-      const pdf = await this.pdfService.generateInvoicePdf(templateData);
-      const signed = await this.signingProvider.sign(
+      const document = this.adapter.toUjpDocument(invoice);
+      const envelope: UjpEnvelope = { requestTimestamp, document };
+      const signed = await this.signer.signToJws(
         invoice.company,
-        pdf,
-        invoice.invoiceNo,
+        envelope,
+        docTypeCode,
       );
-      row.signedDocumentRef = signed.signedRef;
+      row.signedDocumentRef = signed.certSerialNumber;
 
-      // 2) Поднеси до УЈП
+      // 3) Испрати (синхроно).
       row.status = UjpSubmissionStatus.SUBMITTING;
       row.submittedAt = new Date();
       await this.statusRepo.save(row);
 
-      const result = await this.ujpClient.submit(
-        payload,
-        signed.signedRef,
-        row.idempotencyKey,
+      const ctx: UjpSubmitContext = {
+        eujpId: process.env.UJP_EUJP_ID || '',
+        edb: invoice.company.edb,
+        certSerialNumber: signed.certSerialNumber,
+        docTypeCode,
+      };
+
+      console.log(signed, 'SIGNED');
+
+      const result = await this.ujpClient.send(
+        signed.jws,
+        requestTimestamp,
+        ctx,
       );
       row.rawResponse = result.raw;
 
-      // 3) Обработи резултат
-      switch (result.kind) {
-        case UjpAckKind.APPROVED:
-          row.status = UjpSubmissionStatus.APPROVED;
-          row.ujpDocumentId = result.ujpDocumentId ?? null;
-          row.confirmedAt = new Date();
-          break;
-        case UjpAckKind.REJECTED:
-          row.status = UjpSubmissionStatus.REJECTED;
-          row.rejectionReason =
-            result.rejectionReason ?? 'УЈП го одби документот.';
-          break;
-        case UjpAckKind.ACCEPTED:
-        default:
-          row.status = UjpSubmissionStatus.AWAITING_CONFIRMATION;
-          row.ujpReference = result.ujpReference ?? null;
-          break;
-      }
-      await this.statusRepo.save(row);
-    } catch (err) {
-      await this.handleProcessingError(row, err);
-    }
-  }
-
-  /** Проверка на статус за асинхроно поднесени (AWAITING) записи. */
-  async pollAwaiting(row: InvoiceUjpStatus): Promise<void> {
-    if (!row.ujpReference) {
-      await this.fail(row, 'Недостасува УЈП референца за проверка на статус.');
-      return;
-    }
-    try {
-      const result = await this.ujpClient.getDocumentStatus(row.ujpReference);
-      row.rawResponse = result.raw;
-      if (result.kind === UjpAckKind.APPROVED) {
+      if (result.outcome === UjpSendOutcome.SUCCESS) {
         row.status = UjpSubmissionStatus.APPROVED;
-        row.ujpDocumentId = result.ujpDocumentId ?? null;
+        row.ujpDocumentId = result.euid ?? null; // EUID
+        row.qrLink = result.qrLink ?? null;
+        row.ujpStatusCode = '01'; // Испратена (Нова)
         row.confirmedAt = new Date();
-      } else if (result.kind === UjpAckKind.REJECTED) {
+      } else {
         row.status = UjpSubmissionStatus.REJECTED;
         row.rejectionReason =
-          result.rejectionReason ?? 'УЈП го одби документот.';
+          result.rejectionReason ?? result.message ?? 'УЈП го одби документот.';
       }
-      // ACCEPTED → остани во AWAITING, ќе се провери повторно.
       await this.statusRepo.save(row);
     } catch (err) {
       await this.handleProcessingError(row, err);
@@ -226,7 +203,6 @@ export class UjpSubmissionService {
     err: unknown,
   ): Promise<void> {
     if (err instanceof UjpBusinessRejectionError) {
-      // Постојано одбивање — не повторувај, побарај корисникот да исправи.
       row.status = UjpSubmissionStatus.REJECTED;
       row.rejectionReason = err.message;
       row.rawResponse = err.raw;
@@ -242,7 +218,6 @@ export class UjpSubmissionService {
 
   private async fail(row: InvoiceUjpStatus, message: string): Promise<void> {
     row.lastError = message;
-    // По исцрпени обиди останува во ERROR за рачна интервенција; инаку QUEUED за повтор.
     row.status =
       row.attempts >= MAX_UJP_ATTEMPTS
         ? UjpSubmissionStatus.ERROR
@@ -250,10 +225,7 @@ export class UjpSubmissionService {
     await this.statusRepo.save(row);
   }
 
-  /**
-   * Ги наоѓа записите што чекаат обработка/повтор — го користи reconciler-от.
-   * QUEUED и ERROR (под лимитот) за повтор; AWAITING за poll.
-   */
+  /** Записи што чекаат обработка/повтор — ги користи reconciler-от. */
   async findProcessable(limit = 25): Promise<InvoiceUjpStatus[]> {
     return this.statusRepo.find({
       where: {
@@ -261,38 +233,10 @@ export class UjpSubmissionService {
           UjpSubmissionStatus.QUEUED,
           UjpSubmissionStatus.SIGNING,
           UjpSubmissionStatus.SUBMITTING,
-          UjpSubmissionStatus.AWAITING_CONFIRMATION,
         ]),
       },
       order: { updated_at: 'ASC' },
       take: limit,
     });
-  }
-
-  /** Одобрен документ што пристигнал преку webhook од УЈП. */
-  async applyCallback(
-    reference: string,
-    kind: UjpAckKind,
-    ujpDocumentId?: string,
-    rejectionReason?: string,
-  ): Promise<void> {
-    const row = await this.statusRepo.findOne({
-      where: { ujpReference: reference },
-    });
-    if (!row) {
-      this.logger.warn(`УЈП callback за непозната референца: ${reference}`);
-      return;
-    }
-    if (TERMINAL_UJP_STATUSES.has(row.status)) return;
-
-    if (kind === UjpAckKind.APPROVED) {
-      row.status = UjpSubmissionStatus.APPROVED;
-      row.ujpDocumentId = ujpDocumentId ?? row.ujpDocumentId ?? null;
-      row.confirmedAt = new Date();
-    } else if (kind === UjpAckKind.REJECTED) {
-      row.status = UjpSubmissionStatus.REJECTED;
-      row.rejectionReason = rejectionReason ?? 'УЈП го одби документот.';
-    }
-    await this.statusRepo.save(row);
   }
 }

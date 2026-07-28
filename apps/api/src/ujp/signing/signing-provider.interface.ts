@@ -1,35 +1,35 @@
 import { Company } from '../../companies/entities/company.entity';
 
-/** Injection токен за активниот провајдер за дигитален потпис. */
+/** Injection токен за активниот провајдер за JWS потпишување. */
 export const SIGNING_PROVIDER = Symbol('SIGNING_PROVIDER');
 
-export interface SignedDocument {
-  /** Име на провајдерот што потпишал (пр. 'KIBS', 'Nextsense'). */
-  provider: string;
-  /** Референца/ID на потпишувачкото барање кај провајдерот. */
-  signedRef: string;
-  /** Статус вратен од провајдерот (пр. 'PENDING', 'SIGNED'). */
-  status: string;
+export interface SignedJws {
+  /** Компактен JWS (header.payload.signature) над JSON документот. */
+  jws: string;
+  /** Сериски број на сертификатот со кој е потпишано (за X-SERIAL-NUMBER). */
+  certSerialNumber: string;
 }
 
 /**
- * Апстракција за дигитален потпис.
+ * Апстракција за дигитален потпис во форма на **JWS** (JSON Web Signature).
  *
- * НАМЕРНО не држиме приватни клучеви/сертификати кај нас. Секој провајдер
- * (KIBS SignPlus, Nextsense) потпишува со клуч чуван во сертифициран HSM на
- * издавачот, а корисникот го одобрува потпишувањето оддалечено (OneID/OTP).
- * За да смениш провајдер, смени го `useClass` во `UjpModule` — ништо друго.
+ * УЈП бара payload-от да се потпише со КВАЛИФИКУВАН сертификат на даночниот
+ * обврзник и да се прати како JWS (не потпишан PDF). Клучот мора да остане под
+ * контрола на потписникот; затоа изборот на custody (локален сервер / далечинско
+ * HSM потпишување / клиентска страна) е одвоен зад овој интерфејс.
+ *
+ * За да смениш начин на потпишување, смени го `useClass` во `UjpModule`.
  */
-export interface SigningProvider {
+export interface JwsSigningProvider {
   readonly name: string;
   /**
-   * Иницира потпишување на подготвениот документ.
-   * @param pdfBuffer готовиот PDF што се потпишува
-   * @param invoiceNo број на фактура (за приказ во апликацијата на потписникот)
+   * Потпишува JSON payload и враќа компактен JWS.
+   * @param payload комплетниот УЈП JSON документ (со `requestTimestamp`)
+   * @param docTypeCode код на тип документ (пр. '100')
    */
-  sign(
+  signToJws(
     company: Company,
-    pdfBuffer: Buffer,
-    invoiceNo: number,
-  ): Promise<SignedDocument>;
+    payload: unknown,
+    docTypeCode: string,
+  ): Promise<SignedJws>;
 }

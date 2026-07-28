@@ -34,9 +34,17 @@ export class InvoiceUjpStatus extends Base {
   @Column({ unique: true })
   idempotencyKey!: string;
 
-  /** ID на документот доделен од УЈП по одобрување. */
+  /** EUID (E-Invoice Unique ID) доделен од УЈП по успешно поднесување. */
   @Column({ type: 'varchar', nullable: true })
   ujpDocumentId?: string | null;
+
+  /** Линк што се печати како QR код на документот (враќа УЈП). */
+  @Column({ type: 'varchar', nullable: true })
+  qrLink?: string | null;
+
+  /** Код на статусот кај УЈП (01 Испратена, 03 Прифатена, 07 Сторнирана...). */
+  @Column({ type: 'varchar', nullable: true })
+  ujpStatusCode?: string | null;
 
   /** Референца/тикет за проверка на статусот кај асинхроно поднесување. */
   @Column({ type: 'varchar', nullable: true })

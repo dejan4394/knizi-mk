@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
@@ -5,14 +6,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import {
-  UjpAckKind,
-  UjpDocumentPayload,
-  UjpSubmitResult,
+  UjpCompanyInfo,
+  UjpSendOutcome,
+  UjpSendResult,
+  UjpSubmitContext,
 } from '../dto/ujp-payload.types';
 
 /**
- * Грешка за ПОСТОЈАНО (бизнис/валидационо) одбивање од УЈП.
- * Кога ќе се фрли, поднесувањето НЕ се повторува — се бара корисникот да ја исправи фактурата.
+ * Грешка за ПОСТОЈАНО (валидационо) одбивање од УЈП — не се повторува.
  */
 export class UjpBusinessRejectionError extends Error {
   constructor(
@@ -25,88 +26,84 @@ export class UjpBusinessRejectionError extends Error {
 }
 
 /**
- * HTTP клиент кон владиниот е-Фактура (УЈП) API.
+ * HTTP клиент кон УЈП е-Фактура (тест).
  *
- * Спецификацијата на УЈП сè уште не е финална, па:
- *  - обликот на барањето е изолиран овде (менуваш само оваа класа + адаптерот),
- *  - има `UJP_SIMULATE` режим (како MockPaymentService во billing) за да се
- *    тестира целиот pipeline end-to-end пред да излезе вистинскиот API.
+ * Автентикацијата НЕ е OAuth: се праќаат заглавија (X-EUJP-ID, X-EDB,
+ * X-SERIAL-NUMBER, X-DOC-TYPE-CODE), а самото барање е потпишано како JWS.
+ * Поднесувањето е СИНХРОНО — враќа EUID + qr_link веднаш.
  *
- * Наспроти постоечкиот KibsService, тука токенот СЕ КЕШИРА во меморија и сите
- * повици имаат retry со exponential backoff.
+ * Base URL-и:
+ *   - шифрарници/серверско време/компании: {apiBase}/api/v1/...
+ *   - праќање документи: {receiverBase}/api/v1/sales-invoices/send
+ *
+ * `UJP_SIMULATE` (или отсуство на `UJP_API_BASE_URL`) вклучува симулација.
  */
 @Injectable()
 export class UjpClientService {
   private readonly logger = new Logger(UjpClientService.name);
 
-  private readonly baseUrl = process.env.UJP_API_BASE_URL;
-  private readonly clientId = process.env.UJP_CLIENT_ID;
-  private readonly clientSecret = process.env.UJP_CLIENT_SECRET;
-  /** Симулација кога нема конфигуриран вистински API (dev/тест). */
+  private readonly apiBase =
+    process.env.UJP_API_BASE_URL ||
+    'https://efakturatest.ujp.gov.mk/einvoice_api';
+  private readonly receiverBase =
+    process.env.UJP_RECEIVER_URL ||
+    'https://efakturatest.ujp.gov.mk/JSONReceiver';
   private readonly simulate =
-    process.env.UJP_SIMULATE === 'true' || !this.baseUrl;
-
-  private cachedToken: { value: string; expiresAt: number } | null = null;
+    process.env.UJP_SIMULATE === 'true' || !process.env.UJP_API_BASE_URL;
 
   constructor(private readonly httpService: HttpService) {}
 
-  /** OAuth2 client-credentials со кеш во меморија (обновен ~60s пред истек). */
-  private async getAccessToken(): Promise<string> {
-    const now = Date.now();
-    if (this.cachedToken && this.cachedToken.expiresAt - 60_000 > now) {
-      return this.cachedToken.value;
+  /** Серверско време во формат за `requestTimestamp` (без временска зона). */
+  async getServerTime(): Promise<string> {
+    if (this.simulate) {
+      return new Date().toISOString().slice(0, 19);
     }
-
-    const response = await firstValueFrom(
-      this.httpService.post(`${this.baseUrl}/oauth/token`, {
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        grant_type: 'client_credentials',
-      }),
+    const res = await this.withRetry(() =>
+      firstValueFrom(
+        this.httpService.get(`${this.apiBase}/api/v1/server-time`),
+      ),
     );
-
-    const token = response.data.access_token as string;
-    const expiresInSec = Number(response.data.expires_in ?? 3600);
-    this.cachedToken = { value: token, expiresAt: now + expiresInSec * 1000 };
-    return token;
+    return res.data.timestamp as string;
   }
 
   /**
-   * Поднесување на потпишан документ до УЈП.
-   * @throws UjpBusinessRejectionError за 4xx бизнис-одбивања (без повтор)
-   * @throws Error за преодни грешки (мрежа/5xx/429) — reconciler-от ќе повтори
+   * Праќање дигитално потпишана (JWS) фактура. Синхроно враќа EUID/qr_link.
    */
-  async submit(
-    payload: UjpDocumentPayload,
-    signedRef: string,
-    idempotencyKey: string,
-  ): Promise<UjpSubmitResult> {
+  async send(
+    jws: string,
+    requestTimestamp: string,
+    ctx: UjpSubmitContext,
+  ): Promise<UjpSendResult> {
     if (this.simulate) {
-      return this.simulateSubmit(payload, idempotencyKey);
+      return this.simulateSend(jws);
     }
 
     return this.withRetry(async () => {
-      const token = await this.getAccessToken();
       try {
-        const response = await firstValueFrom(
+        const res = await firstValueFrom(
           this.httpService.post(
-            `${this.baseUrl}/documents`,
-            { document: payload, signatureRef: signedRef },
+            `${this.receiverBase}/api/v1/sales-invoices/send`,
+            { requestTimestamp, jws },
             {
               headers: {
-                Authorization: `Bearer ${token}`,
-                'Idempotency-Key': idempotencyKey,
+                'X-SERIAL-NUMBER': ctx.certSerialNumber,
+                'X-EUJP-ID': ctx.eujpId,
+                'X-EDB': ctx.edb,
+                'X-DOC-TYPE-CODE': ctx.docTypeCode,
                 'Content-Type': 'application/json',
               },
             },
           ),
         );
-        const data = response.data;
+        const data = res.data;
         return {
-          kind: this.mapAckKind(data?.status),
-          ujpDocumentId: data?.documentId,
-          ujpReference: data?.reference,
-          rejectionReason: data?.rejectionReason,
+          outcome:
+            data?.status === 200 || data?.euid
+              ? UjpSendOutcome.SUCCESS
+              : UjpSendOutcome.REJECTED,
+          euid: data?.euid,
+          qrLink: data?.qr_link,
+          message: data?.message,
           raw: data,
         };
       } catch (err) {
@@ -115,69 +112,50 @@ export class UjpClientService {
     });
   }
 
-  /** Проверка на статус за асинхроно поднесени документи. */
-  async getDocumentStatus(reference: string): Promise<UjpSubmitResult> {
+  /** Официјални податоци за компанија по даночен број (за автопополнување). */
+  async getCompanyByTaxNumber(taxNumber: string): Promise<UjpCompanyInfo> {
     if (this.simulate) {
-      // Во симулација, документот се „одобрува" при првата проверка.
       return {
-        kind: UjpAckKind.APPROVED,
-        ujpDocumentId: `SIM-DOC-${reference}`,
-        ujpReference: reference,
-        raw: { simulated: true, status: 'APPROVED' },
+        taxNumber,
+        registrationNumber: '0000000',
+        name: `Тест компанија ${taxNumber}`,
+        address: {
+          street: 'ул. Тест',
+          number: '1',
+          city: 'Скопје',
+          zip: '1000',
+        },
+        countryCode: 'MK',
       };
     }
-
-    return this.withRetry(async () => {
-      const token = await this.getAccessToken();
-      try {
-        const response = await firstValueFrom(
-          this.httpService.get(`${this.baseUrl}/documents/${reference}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        );
-        const data = response.data;
-        return {
-          kind: this.mapAckKind(data?.status),
-          ujpDocumentId: data?.documentId,
-          ujpReference: reference,
-          rejectionReason: data?.rejectionReason,
-          raw: data,
-        };
-      } catch (err) {
-        throw this.classifyError(err);
-      }
-    });
+    const res = await this.withRetry(() =>
+      firstValueFrom(
+        this.httpService.get(`${this.apiBase}/api/v1/companies/${taxNumber}`),
+      ),
+    );
+    return res.data.company as UjpCompanyInfo;
   }
 
-  private mapAckKind(status: unknown): UjpAckKind {
-    switch (status) {
-      case 'APPROVED':
-      case 'ACCEPTED_FINAL':
-        return UjpAckKind.APPROVED;
-      case 'REJECTED':
-        return UjpAckKind.REJECTED;
-      default:
-        return UjpAckKind.ACCEPTED; // примена, чека потврда
-    }
-  }
-
-  /** Преводлив HTTP → преодна грешка (retry) или постојано одбивање (без retry). */
+  /** 4xx (освен 408/429) = бизнис одбивање (без повтор); друго = преодно. */
   private classifyError(err: unknown): Error {
     const status = (err as any)?.response?.status as number | undefined;
     const body = (err as any)?.response?.data;
-    // 4xx (освен 408/429) = бизнис/валидациона грешка → нема поента да повторуваме.
-    if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+    if (
+      status &&
+      status >= 400 &&
+      status < 500 &&
+      status !== 408 &&
+      status !== 429
+    ) {
       const reason =
-        body?.rejectionReason ||
         body?.message ||
+        body?.errorStatus ||
         `УЈП го одби документот (HTTP ${status}).`;
       return new UjpBusinessRejectionError(reason, body ?? null);
     }
-    // Сè друго (мрежа, 5xx, 429, 408) е преодно.
     return err instanceof Error ? err : new Error(String(err));
   }
 
-  /** Едноставен retry со exponential backoff за преодни грешки. */
   private async withRetry<T>(
     fn: () => Promise<T>,
     maxRetries = 3,
@@ -188,7 +166,6 @@ export class UjpClientService {
       try {
         return await fn();
       } catch (err) {
-        // Постојаните одбивања не се повторуваат.
         if (err instanceof UjpBusinessRejectionError) throw err;
         lastErr = err;
         if (attempt < maxRetries) {
@@ -203,26 +180,31 @@ export class UjpClientService {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
-  // --- Симулација (dev/тест), огледало на MockPaymentService од billing ---
-  private simulateSubmit(
-    payload: UjpDocumentPayload,
-    idempotencyKey: string,
-  ): UjpSubmitResult {
-    this.logger.log(
-      `[СИМУЛАЦИЈА] Поднесување фактура бр. ${payload.invoiceNo}/${payload.year} до УЈП.`,
-    );
-    // Мал детерминистички дел одбиен за да се тестира REJECTED патеката.
-    if (payload.totalAmount <= 0) {
-      return {
-        kind: UjpAckKind.REJECTED,
-        rejectionReason: 'Вкупниот износ мора да биде поголем од 0.',
-        raw: { simulated: true },
-      };
+  // --- Симулација ---
+  private simulateSend(jws: string): UjpSendResult {
+    // Ако JWS-от кодира документ со финален износ <=0, симулирај одбивање.
+    try {
+      const body = jws.split('.')[1];
+      const json = JSON.parse(Buffer.from(body, 'base64').toString('utf8'));
+      const finalAmount = json?.document?.docTotals?.docFinalAmount;
+      if (Number(finalAmount) <= 0) {
+        return {
+          outcome: UjpSendOutcome.REJECTED,
+          rejectionReason: 'Вкупниот износ мора да биде поголем од 0.',
+          raw: { simulated: true },
+        };
+      }
+    } catch {
+      /* ignore parse errors in simulation */
     }
+    const euid = `sim-${Buffer.from(String(Date.now())).toString('hex').slice(0, 12)}`;
+    this.logger.log(`[СИМУЛАЦИЈА] Испратена е-Фактура, EUID ${euid}.`);
     return {
-      kind: UjpAckKind.ACCEPTED,
-      ujpReference: `SIM-${idempotencyKey}`,
-      raw: { simulated: true, status: 'ACCEPTED' },
+      outcome: UjpSendOutcome.SUCCESS,
+      euid,
+      qrLink: `https://efakturatest.ujp.gov.mk/euid/${euid}`,
+      message: 'Фактура успешно зачувана (симулација).',
+      raw: { simulated: true, status: 200 },
     };
   }
 }

@@ -1,18 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
-  Body,
   Controller,
   ForbiddenException,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
   Param,
   ParseIntPipe,
   Post,
   Req,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,12 +21,7 @@ import { PlanGuard } from '../billing/guards/plan.guard';
 import { SubscriptionPlan } from '../billing/enums/plan.enum';
 import type { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { UjpSubmissionService } from './services/ujp-submission.service';
-import { UjpAckKind } from './dto/ujp-payload.types';
 
-/**
- * НЕМА class-level guard намерно: `callback` е владин webhook без JWT.
- * Автентицираните рути имаат guards поединечно.
- */
 @Controller('ujp')
 export class UjpController {
   constructor(private readonly submissionService: UjpSubmissionService) {}
@@ -64,7 +56,6 @@ export class UjpController {
       req.user.companyId,
     );
     if (!row) {
-      // Нема поднесување уште — врати DRAFT-еквивалент.
       return { status: 'DRAFT', invoiceId: id };
     }
     if (row.companyId !== req.user.companyId) {
@@ -72,7 +63,9 @@ export class UjpController {
     }
     return {
       status: row.status,
-      ujpDocumentId: row.ujpDocumentId,
+      euid: row.ujpDocumentId,
+      qrLink: row.qrLink,
+      ujpStatusCode: row.ujpStatusCode,
       rejectionReason: row.rejectionReason,
       lastError: row.lastError,
       submittedAt: row.submittedAt,
@@ -81,32 +74,13 @@ export class UjpController {
   }
 
   /**
-   * Webhook од УЈП за асинхрони потврди/одбивања.
-   * Заштитен со споделена тајна (`UJP_CALLBACK_SECRET`), не со JWT.
+   * Автопополнување: официјални податоци за компанија по даночен број (ЕДБ/ЕМБС),
+   * од регистарот на УЈП. Корисно при внесување клиент.
    */
-  @Post('callback')
-  @HttpCode(HttpStatus.OK)
-  async callback(
-    @Headers('x-ujp-signature') signature: string,
-    @Body() body: any,
-  ) {
-    const secret = process.env.UJP_CALLBACK_SECRET;
-    if (!secret || signature !== secret) {
-      throw new UnauthorizedException('Невалиден потпис на УЈП callback.');
-    }
-    const kind = this.mapCallbackStatus(body?.status);
-    await this.submissionService.applyCallback(
-      body?.reference,
-      kind,
-      body?.documentId,
-      body?.rejectionReason,
-    );
-    return { received: true };
-  }
-
-  private mapCallbackStatus(status: unknown): UjpAckKind {
-    if (status === 'APPROVED') return UjpAckKind.APPROVED;
-    if (status === 'REJECTED') return UjpAckKind.REJECTED;
-    return UjpAckKind.ACCEPTED;
+  @Get('company-lookup/:taxNumber')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.EMPLOYEE)
+  async companyLookup(@Param('taxNumber') taxNumber: string) {
+    return this.submissionService.lookupCompany(taxNumber);
   }
 }
